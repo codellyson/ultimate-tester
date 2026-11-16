@@ -1,16 +1,12 @@
 <script setup lang="ts">
 // Getting ready: Tess asks one thing at a time.
-const { state, setupAction, loadApps, startTest } = useTester()
+const { state, setupAction, startTest } = useTester()
 const s = computed(() => state.setup!)
 const app = computed(() => state.apps.find((a) => a.id === state.appId)!)
 const drafting = computed(() => s.value.job.kind === 'draft' && s.value.job.status === 'working')
 const needs = computed(() => s.value.personas.filter((p) => p.signIn && !p.savedAt))
-const busy = computed(() => !!s.value.signingIn || (s.value.job.kind === 'signin' && s.value.job.status === 'working'))
-const signinMsg = computed(() => s.value.job.kind === 'signin' && s.value.job.message && (busy.value || s.value.job.status === 'error') ? s.value.job : null)
-const date = (iso: string) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' })
 
 async function draft() { if (await setupAction('draft')) state.confirmJustDrafted = true }
-async function finish() { if (await setupAction('signin/finish')) loadApps() }
 </script>
 
 <template>
@@ -41,25 +37,7 @@ async function finish() { if (await setupAction('signin/finish')) loadApps() }
           <TessSays>{{ needs.length ? `Different people see different things in ${app.name}, so I test as each of these. Sign me in once as the ones that need it, with test accounts, your usual way. I keep each session on this Mac and never see a password.` : `These are the people I test as. Everyone's ready.` }}</TessSays>
           <div class="ms-12 flex flex-col gap-3">
             <h2 class="text-[13px] font-semibold uppercase tracking-wide text-[var(--muted)]">Who I test as</h2>
-            <div class="max-w-2xl rounded-2xl bg-white surface divide-y divide-[var(--line)]">
-              <div v-for="p in s.personas" :key="p.key" :class="['px-5 py-3.5 flex items-center gap-4', s.signingIn === p.key && 'bg-[var(--accent-soft)]']">
-                <div class="flex-1 min-w-0"><p class="font-medium">{{ p.label }}</p><p class="text-[12px] text-[var(--muted)] mono">{{ p.key }}</p></div>
-                <div class="flex items-center gap-3 shrink-0">
-                  <span v-if="!p.signIn" class="text-[var(--muted)]">No sign-in needed</span>
-                  <button v-else-if="s.signingIn === p.key" class="btn-blue" @click="finish">I'm signed in</button>
-                  <template v-else>
-                    <span v-if="p.savedAt" class="text-[var(--ok)]">✓ Signed in · {{ date(p.savedAt) }}</span>
-                    <button
-                      :class="p.savedAt ? 'link text-[12px]' : 'btn-blue'" :disabled="busy"
-                      :aria-label="`${p.savedAt ? 'Sign in again' : 'Sign in'} as ${p.label}`"
-                      @click="setupAction('signin/start', { persona: p.key })"
-                    >{{ p.savedAt ? 'Sign in again' : 'Sign in' }}</button>
-                  </template>
-                </div>
-              </div>
-              <div class="px-5 py-3 text-[12px] text-[var(--muted)]">Add or rename people under Personas in the profile above.</div>
-            </div>
-            <p v-if="signinMsg" :class="signinMsg.status === 'error' ? 'text-[var(--bad)]' : 'text-[var(--muted)]'">{{ signinMsg.message }}</p>
+            <PersonaList />
           </div>
           <TessSays v-if="!needs.length">
             All set. What should I test?

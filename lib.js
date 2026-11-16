@@ -92,3 +92,29 @@ export function usageLabel({ paid, plan, costUsd }) {
   if (paid) return `$${costUsd.toFixed(2)}`;
   return `on your Claude ${plan ? `${plan[0].toUpperCase()}${plan.slice(1)} ` : ''}plan, no charge`;
 }
+
+// Adds "- line" to a profile section, creating the section at the end if it is missing.
+export function addToSection(md, head, line) {
+  const parts = md.trimEnd().split(/^(?=## )/m);
+  const i = parts.findIndex((p) => p.startsWith(`## ${head}\n`) || p.trim() === `## ${head}`);
+  if (i < 0) return `${md.trimEnd()}\n\n## ${head}\n- ${line}\n`;
+  parts[i] = `${parts[i].trimEnd()}\n- ${line}\n\n`;
+  return parts.join('').trimEnd() + '\n';
+}
+
+// What went wrong in the last few finished runs, so Tess re-checks it. verdicts: newest first.
+export function recentRuns(verdicts, max = 3) {
+  return verdicts.filter(Boolean).slice(0, max).map((v) => {
+    const bad = (v.flows ?? []).filter((f) => f.status !== 'pass').map((f) => `  - ${f.status}: ${f.name}${f.actual ? ` (saw: ${f.actual.slice(0, 160)})` : ''}`);
+    return [`- ${v.status}: ${(v.summary ?? '').slice(0, 200)}`, ...bad.slice(0, 5)].join('\n');
+  }).join('\n') || 'No earlier runs.';
+}
+
+// Replaces a profile section's body, adding the section at the end when missing.
+export function setSection(md, head, body) {
+  const parts = md.trimEnd().split(/^(?=## )/m);
+  const i = parts.findIndex((p) => p.startsWith(`## ${head}\n`) || p.trim() === `## ${head}`);
+  const sec = `## ${head}\n${body.trim()}\n\n`;
+  if (i < 0) parts.push(`\n\n${sec}`); else parts[i] = sec;
+  return parts.join('').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+}

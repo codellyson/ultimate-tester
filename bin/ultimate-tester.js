@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, appendFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, appendFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shouldSkip, VERDICT_SCHEMA, enforceEvidence, renderReport, usageLabel, withPort, parsePersonas } from '../lib.js';
+import { shouldSkip, VERDICT_SCHEMA, enforceEvidence, renderReport, usageLabel, withPort, parsePersonas, recentRuns } from '../lib.js';
 const PORT = Number(process.env.ULTIMATE_TESTER_PORT ?? 4600);
 import { startBrowser, freePort, useSession } from '../live.js';
 import { sessionFile } from '../actions.js';
@@ -149,7 +149,7 @@ function personaLines() {
 }
 
 // Returns { status, report } — status is pass | fail | unverified | skip.
-async function run({ commit = null, range = null, dedupe = false } = {}) {
+async function run({ commit = null, range = null, dedupe = false, note = '' } = {}) {
   process.chdir(root());
   if (!existsSync(PROFILE)) return { status: 'skip', report: `No ${PROFILE}. Run: ultimate-tester init` };
   const change = collectChange(commit, range);
@@ -165,9 +165,11 @@ async function run({ commit = null, range = null, dedupe = false } = {}) {
     return { status: 'skip', report: 'Ultimate Tester skipped: change already tested' };
   }
 
-  const runDir = join(process.cwd(), STATE, 'runs', new Date().toISOString().replace(/[:.]/g, '-'));
+  const runsRoot = join(process.cwd(), STATE, 'runs');
+  const past = existsSync(runsRoot) ? readdirSync(runsRoot).sort().reverse().map((d) => { try { return JSON.parse(readFileSync(join(runsRoot, d, 'verdict.json'), 'utf8')); } catch { return null; } }) : [];
+  const runDir = join(runsRoot, new Date().toISOString().replace(/[:.]/g, '-'));
   mkdirSync(runDir, { recursive: true });
-  writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: change.mode, message: change.message, files: change.files }));
+  writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: change.mode, message: change.message, files: change.files, note }));
   const port = await freePort();
   const prompt = readFileSync(join(HOME, 'prompt.md'), 'utf8')
     .replace('{{PROFILE}}', () => withPort(readFileSync(PROFILE, 'utf8'), port))
@@ -175,6 +177,8 @@ async function run({ commit = null, range = null, dedupe = false } = {}) {
     .replaceAll('{{AS}}', `node ${JSON.stringify(SELF)} as`)
     .replaceAll('{{PORT}}', String(port))
     .replaceAll('{{RUN_DIR}}', () => runDir)
+    .replace('{{NOTE}}', () => note.trim() || 'None.')
+    .replace('{{HISTORY}}', () => recentRuns(past))
     .replace('{{MODE}}', change.mode)
     .replace('{{MESSAGE}}', () => change.message)
     .replace('{{DIFF}}', () => change.diff.slice(0, 200_000)); // shortcut: huge diffs are cut, upgrade to per-file summaries if it bites
@@ -231,19 +235,23 @@ async function setup() {
   await openWindow('&view=setup', true);
 }
 
-function install() {
+// which: "stop" (Claude Code Stop hook), "commit" (post-commit hook), or both when not given.
+function install(which) {
   init();
   const envPrefix = process.env.ULTIMATE_TESTER_TIMEOUT_MS ? `ULTIMATE_TESTER_TIMEOUT_MS=${TIMEOUT_MS} ` : '';
   const cmd = `${envPrefix}node ${JSON.stringify(SELF)}`;
   const settingsFile = join('.claude', 'settings.json');
-  mkdirSync('.claude', { recursive: true });
-  const settings = existsSync(settingsFile) ? JSON.parse(readFileSync(settingsFile, 'utf8')) : {};
-  const stop = (settings.hooks ??= {}).Stop ??= [];
-  if (!JSON.stringify(stop).includes('ultimate-tester')) {
-    stop.push({ hooks: [{ type: 'command', command: `${cmd} hook`, timeout: Math.ceil(TIMEOUT_MS / 1000) + 60 }] });
-    writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
-    console.log(`Added Stop hook to ${settingsFile}`);
+  if (which !== 'commit') {
+    mkdirSync('.claude', { recursive: true });
+    const settings = existsSync(settingsFile) ? JSON.parse(readFileSync(settingsFile, 'utf8')) : {};
+    const stop = (settings.hooks ??= {}).Stop ??= [];
+    if (!JSON.stringify(stop).includes('ultimate-tester')) {
+      stop.push({ hooks: [{ type: 'command', command: `${cmd} hook`, timeout: Math.ceil(TIMEOUT_MS / 1000) + 60 }] });
+      writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+      console.log(`Added Stop hook to ${settingsFile}`);
+    }
   }
+  if (which === 'stop') return;
   const hookFile = join(git('rev-parse', '--git-path', 'hooks'), 'post-commit');
   const line = `${cmd} run --commit > ${STATE}/last-commit.log 2>&1 & # ultimate-tester\n`;
   const existing = existsSync(hookFile) ? readFileSync(hookFile, 'utf8') : '#!/bin/sh\n';
@@ -261,7 +269,8 @@ switch (cmdName) {
     const at = rest.indexOf('--commit');
     const commit = at < 0 ? null : rest[at + 1] && !rest[at + 1].startsWith('-') ? rest[at + 1] : 'HEAD';
     const r = rest.indexOf('--range');
-    const { status, report } = await run({ commit, range: r < 0 ? null : rest[r + 1] });
+    const n = rest.indexOf('--note');
+    const { status, report } = await run({ commit, range: r < 0 ? null : rest[r + 1], note: n < 0 ? '' : rest[n + 1] ?? '' });
     console.log(report);
     process.exit(exitFor[status]);
   }
@@ -292,8 +301,8 @@ switch (cmdName) {
   }
   case 'init': init(); break;
   case 'setup': await setup(); process.exit(0);
-  case 'install': install(); break;
+  case 'install': install(rest[0]); break;
   default:
-    console.log('usage: ultimate-tester <setup | run [--commit [sha] | --range base..head] | serve | install | init | hook>');
+    console.log('usage: ultimate-tester <setup | run [--commit [sha] | --range base..head] [--note text] | serve | install | init | hook>');
     process.exit(cmdName ? 1 : 0);
 }

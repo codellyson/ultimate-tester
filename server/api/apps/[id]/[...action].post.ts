@@ -8,7 +8,11 @@ export default defineEventHandler(async (event) => {
       case 'draft': a.draftProfile(); break
       case 'signin/start': a.signInStart(body.persona).catch(() => {}); break // keeps going; the page polls setup
       case 'signin/finish': await a.signInFinish(); break
-      case 'run': a.startRun(body.kind, body.target); break
+      case 'run': a.startRun(body.kind, body.target, body.note); break
+      case 'lesson': a.addLesson(body.text, body.check); break
+      case 'notes': a.setNotes(body.text); break
+      case 'trigger': a.setTrigger(body.mode); break
+      case 'onboarded': a.finishOnboarding(); break
       default: throw createError({ statusCode: 404, statusMessage: 'not found' })
     }
     return a.status()

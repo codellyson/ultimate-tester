@@ -1,9 +1,9 @@
 // What the window's Setup screen and run buttons can do, for one repo.
-import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseStart, withPort, parsePersonas } from './lib.js';
+import { parseStart, withPort, parsePersonas, addToSection, setSection } from './lib.js';
 import { signInWindow, freePort } from './live.js';
 
 // UT_HOME is set by `ultimate-tester serve`; once Nitro bundles this file, import.meta.url no longer points at the repo.
@@ -36,11 +36,22 @@ export function createActions(root) {
   const profileFile = join(root, '.ultimate-tester.md');
   const personasNow = () => parsePersonas(existsSync(profileFile) ? readFileSync(profileFile, 'utf8') : '');
   // One thing at a time per repo; the window polls `job` to show progress.
-  let job = { kind: null, status: 'idle', message: '' };
+  let job = { kind: null, status: 'idle', message: '', steps: [] };
   let signIn = null; // { win, app }
   let run = null;
 
-  const set = (kind, status, message) => { job = { kind, status, message }; };
+  const set = (kind, status, message, steps = []) => { job = { kind, status, message, steps }; };
+
+  // Which automatic triggers are installed: Claude Code's Stop hook and/or the git post-commit hook.
+  const triggers = () => {
+    const read = (f) => { try { return readFileSync(f, 'utf8'); } catch { return ''; } };
+    let hooks = '';
+    try { hooks = execFileSync('git', ['rev-parse', '--git-path', 'hooks'], { cwd: root, encoding: 'utf8' }).trim(); } catch {}
+    return {
+      stop: read(join(root, '.claude', 'settings.json')).includes('ultimate-tester'),
+      commit: !!hooks && read(join(root, hooks, 'post-commit')).includes('# ultimate-tester'),
+    };
+  };
   const busy = () => job.status === 'working';
 
   return {
@@ -52,9 +63,14 @@ export function createActions(root) {
         try { savedAt = JSON.parse(readFileSync(sessionFile(state, p.key, list), 'utf8')).savedAt; } catch {}
         return { ...p, savedAt };
       });
+      const profileReady = !!profile && profile !== TEMPLATE;
+      const hasRuns = existsSync(join(state, 'runs')) && readdirSync(join(state, 'runs')).length > 0;
       return {
         profile,
-        profileReady: !!profile && profile !== TEMPLATE,
+        profileReady,
+        // Apps set up before onboarding existed count as onboarded once they have a test.
+        onboarded: existsSync(join(state, 'onboarded')) || (profileReady && hasRuns),
+        triggers: triggers(),
         start: parseStart(profile),
         personas,
         // every persona that needs a sign-in has one
@@ -78,17 +94,34 @@ export function createActions(root) {
       const ask = `Read this repository (package.json, README, CLAUDE.md or AGENTS.md, .claude/launch.json, .env.example) and write an Ultimate Tester profile for it, in exactly this Markdown shape:
 
 ${TEMPLATE}
-Rules: Start command runs the app locally on a port nothing else in the repo uses; "Ready when" names its http://localhost URL. Seed: a local-only reset or "none". Allowed URLs: localhost only, and name any production hosts to never touch. Test accounts: if the app needs sign-in, write "Saved session from Ultimate Tester setup" (never a password). Personas: each kind of user whose access differs — plan or feature tiers, staff roles, new versus long-standing accounts, the customer or shopper side, a signed-out visitor — one line each as "- key: who they are", adding "no sign-in" for guests and visitors; 2 to 6 personas, only ones the code shows exist. Must never break: 3 to 5 core flows a user does daily. Existing checks: only the test files a change touches, never full suites.`;
-      const child = spawn('claude', ['-p', '--model', MODEL, '--output-format', 'json', '--no-session-persistence', '--setting-sources', '',
+Rules: Start command runs the app locally on a port nothing else in the repo uses; "Ready when" names its http://localhost URL. Seed: a local-only reset or "none". Allowed URLs: localhost only, and name any production hosts to never touch. Test accounts: if the app needs sign-in, write "Saved session from Ultimate Tester setup" (never a password). Personas: each kind of user whose access differs — plan or feature tiers, staff roles, new versus long-standing accounts, the customer or shopper side, a signed-out visitor — one line each as "- key: who they are", adding "no sign-in" for guests and visitors; 2 to 6 personas, only ones the code shows exist. Must never break: 3 to 5 core flows a user does daily. Existing checks: only the test files a change touches, never full suites. Notes for Tess: keep the placeholder line as it is; the developer fills it in.`;
+      const child = spawn('claude', ['-p', '--model', MODEL, '--output-format', 'stream-json', '--verbose', '--no-session-persistence', '--setting-sources', '',
         '--json-schema', JSON.stringify(schema), '--allowedTools', 'Read', 'Glob', 'Grep', '--disallowedTools', 'Bash', 'Edit', 'Write'],
       { cwd: root, env: { ...process.env, ULTIMATE_TESTER_CHILD: '1' } });
-      let out = '';
-      child.stdout.on('data', (d) => (out += d));
+      // Each file Tess opens shows up live on the onboarding screen.
+      const rel = (f = '') => f.startsWith(root) ? f.slice(root.length + 1) : f;
+      const say = (t) => { if (t && job.steps.at(-1) !== t) job.steps = [...job.steps, t].slice(-40); };
+      let buf = '';
+      let profile = null;
+      child.stdout.on('data', (d) => {
+        buf += d;
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          let ev; try { ev = JSON.parse(line); } catch { continue; }
+          if (ev.type === 'result') profile = ev.structured_output?.profile ?? null;
+          for (const c of ev.type === 'assistant' ? ev.message?.content ?? [] : []) {
+            if (c.type !== 'tool_use') continue;
+            const i = c.input ?? {};
+            say(c.name === 'Read' ? `Reading ${rel(i.file_path)}` : c.name === 'Grep' ? `Searching for “${i.pattern}”` : c.name === 'Glob' ? `Looking for ${i.pattern}` : null);
+          }
+        }
+      });
       child.on('close', () => {
-        try {
-          writeFileSync(profileFile, JSON.parse(out).structured_output.profile.trim() + '\n');
-          set('draft', 'done', 'Drafted. Read it and fix anything wrong.');
-        } catch { set('draft', 'error', 'Tess could not draft the profile. Fill it in by hand.'); }
+        if (profile?.trim()) {
+          writeFileSync(profileFile, profile.trim() + '\n');
+          set('draft', 'done', 'Drafted. Read it and fix anything wrong.', job.steps);
+        } else set('draft', 'error', 'Tess could not draft the profile. Fill it in by hand.', job.steps);
       });
       child.stdin.end(ask);
     },
@@ -129,13 +162,44 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
       }
     },
 
-    // kind: "changes" | "commit" | "range"; target: sha or base..head.
-    startRun(kind, target) {
+    // "Always keep in mind": the profile's Notes for Tess section.
+    setNotes(text) {
+      if (typeof text !== 'string' || text.length > 5000) throw new Error('Notes are too long');
+      if (!existsSync(profileFile)) throw new Error('Set up the profile first');
+      const body = text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => (l.startsWith('-') ? l : `- ${l}`)).join('\n');
+      if (body) writeFileSync(profileFile, setSection(readFileSync(profileFile, 'utf8'), 'Notes for Tess', body));
+    },
+
+    // mode: "stop" (when Claude Code finishes), "commit" (after every commit) or "manual".
+    setTrigger(mode) {
+      if (!['stop', 'commit', 'manual'].includes(mode)) throw new Error('Choose when Tess should test');
+      if (mode !== 'manual') execFileSync(process.execPath, [CLI, 'install', mode], { cwd: root, env: childEnv(), stdio: 'ignore' });
+    },
+
+    finishOnboarding() {
+      mkdirSync(state, { recursive: true });
+      writeFileSync(join(state, 'onboarded'), new Date().toISOString());
+    },
+
+    // Feedback on a check becomes a lesson in the profile, read on every later run.
+    addLesson(text, check) {
+      const clean = (v) => String(v ?? '').replace(/\s+/g, ' ').trim();
+      const t = clean(text);
+      if (!t || t.length > 500) throw new Error('Say in a sentence what Tess should know (up to 500 characters)');
+      if (!existsSync(profileFile)) throw new Error('Set up the profile first');
+      const c = clean(check).slice(0, 120);
+      writeFileSync(profileFile, addToSection(readFileSync(profileFile, 'utf8'), 'Lessons', c ? `${c}: ${t}` : t));
+    },
+
+    // kind: "changes" | "commit" | "range"; target: sha or base..head; note: extra instructions for this run only.
+    startRun(kind, target, note) {
+      if (typeof note === 'string' && note.length > 1000) throw new Error('Keep the note under 1000 characters');
       if (run) throw new Error('A test is already running');
       const args = kind === 'commit' ? ['--commit', target || 'HEAD'] : kind === 'range' ? ['--range', target] : [];
       if (kind === 'range' && !/^[\w./-]+\.\.[\w./-]+$/.test(target ?? '')) throw new Error('A release is two refs, like origin/prd..HEAD');
       if (kind === 'commit' && target && !/^[\w./-]+$/.test(target)) throw new Error('That is not a commit or branch name');
       // Detached so a test keeps going if the app or engine restarts mid-run.
+      if (note?.trim()) args.push('--note', note.trim());
       run = spawn(process.execPath, [CLI, 'run', ...args], { cwd: root, stdio: 'ignore', detached: true, env: childEnv() });
       run.on('close', () => { run = null; });
       run.unref();

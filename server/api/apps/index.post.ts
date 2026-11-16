@@ -1,4 +1,4 @@
-import { addApp } from '../../../apps.js'
+import { addApp } from '~~/apps.js'
 
 export default defineEventHandler(async (event) => {
   const body: { path?: string } = (await readBody(event).catch(() => null)) ?? {}

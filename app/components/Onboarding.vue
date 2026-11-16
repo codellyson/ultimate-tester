@@ -1,0 +1,187 @@
+<script setup lang="ts">
+// First run for an app: welcome, Tess reads the repo, you check her plan, sign her in, choose when she tests, first test.
+const { state, api, addApp, addSample, setupAction, startTest, show } = useTester()
+const s = computed(() => state.setup)
+const app = computed(() => state.apps.find((a) => a.id === state.appId))
+const STEPS = ['Welcome', 'Read the app', 'Check the plan', 'Sign in', 'First test']
+const step = ref(!state.appId ? 0 : !s.value?.profileReady ? 1 : 2)
+const top = ref<HTMLElement>()
+function go(n: number) { step.value = n; nextTick(() => top.value?.scrollTo({ top: 0 })) }
+
+// 0 · Is this Mac ready?
+type Preflight = { claude: { ok: boolean, plan: string | null, apiKey: boolean }, chrome: boolean, node: string }
+const pre = ref<Preflight | null>(null)
+onMounted(async () => { if (step.value === 0) pre.value = await api<Preflight>('/api/preflight').catch(() => null) })
+const nodeOk = computed(() => Number(pre.value?.node.split('.')[0]) >= 20)
+const plan = computed(() => {
+  const c = pre.value?.claude
+  if (!c?.ok) return ''
+  return c.apiKey ? 'billed to your API key' : c.plan ? `${c.plan[0]!.toUpperCase()}${c.plan.slice(1)} plan, no extra charge` : ''
+})
+
+// 1 · Tess reads the repo; each file she opens shows up as she goes.
+const job = computed(() => s.value?.job)
+const drafting = computed(() => job.value?.kind === 'draft' && job.value.status === 'working')
+const draftFailed = computed(() => job.value?.kind === 'draft' && job.value.status === 'error')
+const finds = computed(() => (job.value?.kind === 'draft' ? job.value.steps ?? [] : []).slice(-6))
+onMounted(() => { if (step.value === 1 && !drafting.value) setupAction('draft') })
+watch(() => s.value?.profileReady && !drafting.value, (ready) => { if (ready && step.value === 1) go(2) })
+
+// 2 · Things to always keep in mind.
+const notes = ref('')
+const CHIPS = ['Check mobile width too', 'Payments run in test mode', 'Empty states are expected for new accounts', 'Skip the admin area']
+const chips = computed(() => CHIPS.filter((c) => !notes.value.includes(c)))
+const addChip = (c: string) => { notes.value = `${notes.value.trim() ? `${notes.value.trim()}\n` : ''}${c}` }
+async function planOk() { if (!notes.value.trim() || (await setupAction('notes', { text: notes.value }))) go(3) }
+
+// 3 · Sign in.
+const needs = computed(() => s.value?.personas.filter((p) => p.signIn && !p.savedAt) ?? [])
+
+// 4 · When to test, then the first test.
+const trigger = ref<'stop' | 'commit' | 'manual'>(s.value?.triggers.commit && !s.value.triggers.stop ? 'commit' : 'stop')
+const WHEN = [
+  { mode: 'stop', title: 'When Claude Code finishes a task', hint: 'If something broke, I tell Claude Code what, and it fixes it before you look.' },
+  { mode: 'commit', title: 'After every commit', hint: 'I test in the background and the result shows up here.' },
+  { mode: 'manual', title: 'Only when I ask', hint: 'From the + menu or ⌘K.' },
+] as const
+const target = ref(0)
+const starting = ref(false)
+async function begin() {
+  starting.value = true
+  const ok = (await setupAction('trigger', { mode: trigger.value })) && (await setupAction('onboarded'))
+  if (ok) await startTest(TARGETS[target.value]!)
+  starting.value = false
+}
+async function skip() { if (state.appId && (await setupAction('onboarded'))) show('setup') }
+</script>
+
+<template>
+  <section ref="top" class="flex-1 min-h-0 overflow-y-auto">
+    <nav class="sticky top-0 z-10 bg-[var(--page)]/95 backdrop-blur border-b border-[var(--line)] px-6 h-12 flex items-center gap-2" aria-label="Setup steps">
+      <ol class="flex items-center gap-1.5 mx-auto min-w-0 overflow-x-auto">
+        <li v-for="(name, i) in STEPS" :key="name" class="flex items-center gap-1.5 shrink-0">
+          <span v-if="i" class="w-3.5 border-t border-[var(--line)]" aria-hidden="true" />
+          <span
+            :class="['flex items-center gap-1.5 rounded-full px-2.5 py-1', i === step ? 'bg-white ring-1 ring-[var(--line)] text-[var(--ink)]' : 'text-[var(--muted)]']"
+            :aria-current="i === step ? 'step' : undefined"
+          >
+            <b :class="['size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ok)] text-white' : i === step ? 'bg-[var(--accent)] text-white' : 'bg-white ring-1 ring-[var(--line)]']">{{ i < step ? '✓' : i + 1 }}</b>
+            <span class="hidden md:inline">{{ name }}</span>
+          </span>
+        </li>
+      </ol>
+      <button v-if="state.appId && step > 1" class="link text-[12px] shrink-0" @click="skip">Skip setup</button>
+    </nav>
+
+    <div class="max-w-[680px] mx-auto px-6 sm:px-8 py-12 flex flex-col gap-6">
+      <!-- 0 · Welcome -->
+      <template v-if="step === 0">
+        <div class="tess size-[72px] rounded-full shadow-sm breathe" aria-hidden="true" />
+        <h1 class="serif text-[34px] leading-[1.15] text-balance">Hi, I'm Tess. I test your app the way a person would, every time it changes.</h1>
+        <div class="grid sm:grid-cols-3 gap-3">
+          <div class="rounded-2xl bg-white surface p-4 flex flex-col gap-1.5"><b class="font-semibold">I run it</b><span class="text-[var(--muted)]">I start your app on my own port and click through it in a real browser.</span></div>
+          <div class="rounded-2xl bg-white surface p-4 flex flex-col gap-1.5"><b class="font-semibold">I sign in as your users</b><span class="text-[var(--muted)]">Owners, staff, shoppers. Each sees different things, so I test as each.</span></div>
+          <div class="rounded-2xl bg-white surface p-4 flex flex-col gap-1.5"><b class="font-semibold">You get one answer</b><span class="text-[var(--muted)]">Safe to push, or not, with a screenshot for every check.</span></div>
+        </div>
+        <ul class="rounded-2xl bg-white surface divide-y divide-[var(--line)]" aria-label="Is this Mac ready">
+          <li v-if="!pre" class="px-4 py-2.5 text-[var(--muted)]">Checking this Mac…</li>
+          <template v-else>
+            <li class="px-4 py-2.5 flex items-center gap-2 flex-wrap">
+              <span :class="pre.claude.ok ? 'text-[var(--ok)]' : 'text-[var(--bad)]'" aria-hidden="true">{{ pre.claude.ok ? '✓' : '✕' }}</span>
+              <span>{{ pre.claude.ok ? 'Claude Code is signed in' : 'Claude Code is not signed in. Run claude in a terminal and sign in, then come back.' }}</span>
+              <span v-if="plan" class="text-[11px] rounded-full bg-[var(--sand)] text-[var(--muted)] px-2 py-0.5">{{ plan }}</span>
+            </li>
+            <li class="px-4 py-2.5 flex items-center gap-2">
+              <span :class="pre.chrome ? 'text-[var(--ok)]' : 'text-[var(--bad)]'" aria-hidden="true">{{ pre.chrome ? '✓' : '✕' }}</span>
+              <span>{{ pre.chrome ? 'Google Chrome found' : 'Google Chrome not found. Install it; I drive Chrome to test.' }}</span>
+            </li>
+            <li class="px-4 py-2.5 flex items-center gap-2">
+              <span :class="nodeOk ? 'text-[var(--ok)]' : 'text-[var(--warn)]'" aria-hidden="true">{{ nodeOk ? '✓' : '!' }}</span>
+              <span>Node {{ pre.node.split('.')[0] }}{{ nodeOk ? '' : ': I need Node 20 or newer' }}</span>
+            </li>
+          </template>
+        </ul>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn-blue" @click="addApp()">Choose your app's folder</button>
+          <button class="btn" @click="addSample()">Try it on a sample app first</button>
+        </div>
+        <p class="text-[12px] text-[var(--muted)]">Nothing leaves this Mac except what Claude Code already sends. I never see passwords.</p>
+      </template>
+
+      <!-- 1 · Read the app -->
+      <template v-else-if="step === 1">
+        <TessSays v-if="!draftFailed">Reading <b>{{ app?.name }}</b>. I'm working out how it starts, who uses it, and what they do most. About a minute.</TessSays>
+        <TessSays v-else>
+          I couldn't work out how to test {{ app?.name }} on my own. Want me to try again, or fill it in yourself?
+          <template #actions>
+            <div class="flex gap-2">
+              <button class="btn-blue" @click="setupAction('draft')">Try again</button>
+              <button class="btn" @click="skip">Fill it in myself</button>
+            </div>
+          </template>
+        </TessSays>
+        <ul v-if="!draftFailed" class="ms-12 rounded-2xl bg-white surface px-5 py-3 flex flex-col" aria-live="polite">
+          <li v-for="(f, i) in finds" :key="f" class="py-1 flex items-baseline gap-2.5">
+            <span :class="['size-1.5 rounded-full shrink-0 -translate-y-0.5', i === finds.length - 1 ? 'bg-[var(--accent)] pulse' : 'bg-[var(--ok)]']" aria-hidden="true" />
+            <span class="truncate">{{ f }}</span>
+          </li>
+          <li v-if="!finds.length" class="py-1 flex items-baseline gap-2.5 text-[var(--muted)]">
+            <span class="size-1.5 rounded-full shrink-0 -translate-y-0.5 bg-[var(--accent)] pulse" aria-hidden="true" />Opening the repo…
+          </li>
+        </ul>
+      </template>
+
+      <!-- 2 · Check the plan -->
+      <template v-else-if="step === 2 && s">
+        <TessSays>Here's how I'll test {{ app?.name }}. Fix anything that's wrong; I'll follow it exactly.</TessSays>
+        <div class="ms-12"><ProfileCard :profile="s.profile" basic /></div>
+        <TessSays>Anything I should always keep in mind? Things to focus on, skip, or that look broken but aren't.</TessSays>
+        <div class="ms-12 flex flex-col gap-3">
+          <textarea v-model="notes" rows="3" maxlength="5000" class="field resize-none" placeholder="e.g. Payments run in test mode. The B2B pages need the B2B owner." aria-label="Things Tess should always keep in mind" />
+          <div v-if="chips.length" class="flex flex-wrap gap-1.5">
+            <button v-for="c in chips" :key="c" class="rounded-full bg-[var(--sand)] hover:bg-[var(--line)] px-2.5 py-1 text-[12px]" @click="addChip(c)">+ {{ c }}</button>
+          </div>
+          <p class="text-[12px] text-[var(--muted)]">This goes into every test. You can change it later, and I add to it when you correct me.</p>
+          <div class="flex gap-2"><button class="btn-blue" @click="planOk">Looks right</button></div>
+        </div>
+      </template>
+
+      <!-- 3 · Sign in -->
+      <template v-else-if="step === 3 && s">
+        <TessSays>{{ needs.length ? `Sign me in once as the people who need it, with test accounts, your usual way. A Chrome window opens; I keep the session on this Mac.` : `Nobody here needs signing in. On to the last step.` }}</TessSays>
+        <div class="ms-12 flex flex-col gap-3">
+          <PersonaList />
+          <div class="flex items-center gap-4">
+            <button class="btn-blue" :disabled="!!s.signingIn" @click="go(4)">Continue</button>
+            <button v-if="needs.length" class="link" @click="go(4)">Do the rest later</button>
+          </div>
+          <p v-if="needs.length" class="text-[12px] text-[var(--muted)]">Anyone you skip shows as “can't check” in results, with a one-click sign-in.</p>
+        </div>
+      </template>
+
+      <!-- 4 · When to test, and the first test -->
+      <template v-else-if="step === 4 && s">
+        <TessSays>When should I test? I'm most useful when nobody has to remember to ask.</TessSays>
+        <div class="ms-12 rounded-2xl bg-white surface divide-y divide-[var(--line)] overflow-hidden" role="radiogroup" aria-label="When Tess tests">
+          <label v-for="w in WHEN" :key="w.mode" :class="['flex gap-3 items-start px-5 py-3.5 cursor-pointer', trigger === w.mode && 'bg-[var(--accent-soft)]']">
+            <input v-model="trigger" type="radio" name="trigger" :value="w.mode" class="mt-1 accent-[var(--accent)]">
+            <span><b class="font-medium">{{ w.title }}</b><span class="block text-[12px] text-[var(--muted)] mt-0.5">{{ w.hint }}</span></span>
+          </label>
+        </div>
+        <TessSays>Let's do a first one now, so you see how it goes. What should I look at?</TessSays>
+        <div class="ms-12 flex flex-col gap-3">
+          <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="What to test">
+            <button
+              v-for="(t, i) in TARGETS.slice(0, 3)" :key="t.label" role="radio" :aria-checked="target === i"
+              :class="['rounded-full px-3 py-1 text-[12px]', target === i ? 'bg-[var(--accent-soft)] text-[var(--accent)] font-medium' : 'bg-[var(--sand)] hover:bg-[var(--line)]']"
+              @click="target = i"
+            >{{ target === i ? '✓ ' : '' }}{{ t.label }}</button>
+          </div>
+          <input v-model="state.note" type="text" maxlength="1000" class="field" placeholder="Anything to focus on? (optional)" aria-label="Note for this test">
+          <div><button class="btn-blue" :disabled="starting || s.running" @click="begin">{{ starting ? 'Starting…' : 'Start my first test' }}</button></div>
+          <p class="text-[12px] text-[var(--muted)]">Takes 3 to 10 minutes. You can watch me work, or carry on and come back.</p>
+        </div>
+      </template>
+    </div>
+  </section>
+</template>

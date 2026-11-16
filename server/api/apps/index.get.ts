@@ -1,4 +1,4 @@
-import { listApps } from '../../../apps.js'
+import { listApps } from '~~/apps.js'
 
 export default defineEventHandler(() => listApps().map((app: { id: string, root: string, name: string }) => {
   const last = runsOf(app.root)[0]

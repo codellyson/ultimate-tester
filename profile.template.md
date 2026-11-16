@@ -20,3 +20,6 @@
 
 ## Existing checks
 - (e.g. npm test)
+
+## Notes for Tess
+- (anything Tess should always know: areas to focus on, things to skip, known quirks)

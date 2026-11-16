@@ -42,13 +42,20 @@ const verdict = computed(() => {
   return { lead: pass.value ? 'Looking good so far.' : 'Tess is getting started.', em: '', cls: '' }
 })
 const now = ref(Date.now())
-const sub = computed(() => {
-  let s = short(r.value.title)
+// Under the verdict: counts only when something isn't a pass; the test's name and time live in the title bar.
+const meta = computed(() => {
   if (live.value) {
     const left = r.value.typicalMs ? r.value.typicalMs - (now.value - started(r.value.id)) : null
-    s += ` · Tess is still testing${left && left > 60000 ? ` · about ${Math.round(left / 60000)} minutes left` : left && left > 0 ? ' · almost done' : ''}`
-  } else if (v.value) s += ` · ${when(r.value.id)} · ${Math.round((v.value.durationMs ?? 0) / 60000) || '<1'} min · ${v.value.usage ?? ''}`
-  return s
+    return [{ text: 'Tess is still testing', cls: '' }, ...(left && left > 60000 ? [{ text: `about ${Math.round(left / 60000)} minutes left`, cls: '' }] : left && left > 0 ? [{ text: 'almost done', cls: '' }] : [])]
+  }
+  const out: { text: string, cls: string }[] = []
+  if (fail.value || unk.value) {
+    if (pass.value) out.push({ text: `${pass.value} passed`, cls: '' })
+    if (fail.value) out.push({ text: `${fail.value} broke`, cls: 'text-[var(--bad)] font-medium' })
+    if (unk.value) out.push({ text: `${unk.value} can't check`, cls: 'text-[var(--warn)] font-medium' })
+  }
+  if (v.value) out.push({ text: `${Math.round((v.value.durationMs ?? 0) / 60000) || '<1'} min`, cls: '' })
+  return out
 })
 const bar = computed(() => {
   const total = Math.max(plan.value.length, 1)
@@ -145,22 +152,18 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 
 <template>
   <section class="flex-1 min-h-0 flex flex-col">
-    <div class="shrink-0 px-6 py-4 flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-[var(--line)]">
-      <div class="min-w-0">
-        <h1 class="serif text-[26px] leading-tight font-normal text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
-        <p class="mt-0.5 text-[var(--muted)]">{{ sub }}</p>
-      </div>
-      <div class="w-full min-[880px]:w-[380px] min-[880px]:max-w-[45%] min-[880px]:ms-auto shrink-0">
-        <div class="flex h-2.5 rounded-full overflow-hidden bg-[var(--sand)]">
-          <span v-for="(b, i) in bar" :key="i" :class="i === 3 && live && 'pulse'" :style="{ width: b.width, background: b.color }" />
+    <div class="shrink-0 px-6 py-4 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-[var(--line)]">
+      <h1 class="serif text-[26px] leading-tight font-normal text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
+      <p class="text-[var(--muted)] flex flex-wrap gap-x-1.5" :title="v?.usage">
+        <template v-for="(m, i) in meta" :key="m.text"><span v-if="i" aria-hidden="true">·</span><span :class="m.cls">{{ m.text }}</span></template>
+      </p>
+      <div v-if="live" class="w-full min-[880px]:w-[320px] min-[880px]:ms-auto self-center">
+        <div class="flex h-2 rounded-full overflow-hidden bg-[var(--sand)]">
+          <span v-for="(b, i) in bar" :key="i" :class="i === 3 && 'pulse'" :style="{ width: b.width, background: b.color }" />
         </div>
-        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
-          <template v-for="(b, i) in bar" :key="i">
-            <span v-if="i < 3" :class="!b.n && 'text-[var(--muted)]'"><b :style="b.n ? { color: b.color } : {}">{{ b.n }}</b> {{ b.word }}</span>
-            <span v-else-if="live" class="text-[var(--muted)]">{{ b.n }} to go</span>
-          </template>
-        </div>
+        <p class="mt-1.5 text-[12px] text-[var(--muted)]">{{ pass }} passed<template v-if="fail"> · <b class="text-[var(--bad)]">{{ fail }} broke</b></template><template v-if="unk"> · <b class="text-[var(--warn)]">{{ unk }} can't check</b></template> · {{ todo }} to go</p>
       </div>
+      <p v-if="r.change?.note" class="basis-full text-[12px] text-[var(--muted)]">Your note: <span class="text-[var(--ink)]">{{ r.change.note }}</span></p>
     </div>
 
     <div class="flex-1 min-h-0 flex flex-col overflow-y-auto min-[880px]:flex-row min-[880px]:overflow-visible">

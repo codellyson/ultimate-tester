@@ -20,14 +20,14 @@ export const when = (id: string) => {
 export const short = (t?: string) => (t || 'Test')
   .replace(/^\(not committed yet\)$/, 'My changes')
   .replace(/^[0-9a-f]{7,} /, '')
-  .replace(/^Release origin\/(\w+)\.\.HEAD.*/, 'Release $1 ← HEAD')
+  .replace(/^Release origin\/(\w+)\.\.HEAD.*/, 'Release to $1')
   .slice(0, 40)
 
 export const TARGETS = [
   { kind: 'changes', label: 'My changes', hint: 'everything not committed' },
   { kind: 'commit', label: 'Last commit', hint: 'HEAD' },
-  { kind: 'range', target: 'origin/prd..HEAD', label: 'Release: prd ← HEAD', hint: 'everything going to prd' },
-  { kind: 'range', target: 'origin/main..HEAD', label: 'Release: main ← HEAD', hint: 'everything going to main' },
+  { kind: 'range', target: 'origin/prd..HEAD', label: 'Release to prd', hint: 'everything going to prd' },
+  { kind: 'range', target: 'origin/main..HEAD', label: 'Release to main', hint: 'everything going to main' },
 ] as const
 export type Target = { kind: string, target?: string, label?: string, hint?: string }
 

@@ -50,3 +50,23 @@ test('any failed flow fails the run, whatever the tester claimed', () => {
 test('no flows is unverified', () => {
   assert.equal(enforceEvidence({ status: 'pass', summary: '', flows: [] }).status, 'unverified');
 });
+
+test('lessons append to their section, which is created when missing', async () => {
+  const { addToSection } = await import('../lib.js');
+  const md = '## Start\n- Command: x\n\n## Lessons\n- one\n\n## Personas\n- a: b\n';
+  assert.equal(addToSection(md, 'Lessons', 'two'), '## Start\n- Command: x\n\n## Lessons\n- one\n- two\n\n## Personas\n- a: b\n');
+  assert.equal(addToSection('## Start\n- x\n', 'Lessons', 'new'), '## Start\n- x\n\n## Lessons\n- new\n');
+});
+
+test('recent runs list only what went wrong', async () => {
+  const { recentRuns } = await import('../lib.js');
+  const out = recentRuns([{ status: 'fail', summary: 'Don\'t push yet.', flows: [{ name: 'Checkout', status: 'fail', actual: '500' }, { name: 'Login', status: 'pass' }] }, null]);
+  assert.equal(out, "- fail: Don't push yet.\n  - fail: Checkout (saw: 500)");
+  assert.equal(recentRuns([]), 'No earlier runs.');
+});
+
+test('a section body is replaced, or added when missing', async () => {
+  const { setSection } = await import('../lib.js');
+  assert.equal(setSection('## A\n- a\n\n## B\n- b\n', 'A', '- new'), '## A\n- new\n\n## B\n- b\n');
+  assert.equal(setSection('## A\n- a\n', 'Notes for Tess', '- x'), '## A\n- a\n\n## Notes for Tess\n- x\n');
+});

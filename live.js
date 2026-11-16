@@ -5,7 +5,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 
-const CHROME = [
+export const CHROME = [
   process.env.ULTIMATE_TESTER_CHROME,
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/usr/bin/google-chrome',

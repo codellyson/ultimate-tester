@@ -1,8 +1,8 @@
 // The engine's reads over each app's .ultimate-tester folder, plus one actions object per app.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { createActions } from '../../actions.js'
-import { findApp } from '../../apps.js'
+import { createActions } from '~~/actions.js'
+import { findApp } from '~~/apps.js'
 
 export const SAFE = /^[\w.-]+$/
 const read = (f: string) => (existsSync(f) ? readFileSync(f, 'utf8') : null)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { state, boot, addApp, openRun } = useTester()
+const { state, boot, openRun } = useTester()
 onMounted(boot)
 // Window-wide keys: ⌘K opens commands, Escape closes menus, ⌘1–⌘4 jump between test tabs.
 function onKey(e: KeyboardEvent) {
@@ -18,14 +18,8 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); document.r
 <template>
   <div class="h-full flex flex-col overflow-hidden">
     <TitleBar />
-    <section v-if="!state.appId" class="flex-1 min-h-0 overflow-y-auto">
-      <div class="max-w-3xl mx-auto px-10 py-10 flex flex-col gap-6">
-        <TessSays>
-          Hi, I'm Tess. I test your app the way a person would, after every change. Which app should I look after first?
-          <template #actions><button class="btn-blue self-start" @click="addApp()">Choose an app folder</button></template>
-        </TessSays>
-      </div>
-    </section>
+    <Onboarding v-if="!state.appId" key="welcome" />
+    <Onboarding v-else-if="state.view === 'onboard' && state.setup" :key="state.appId" />
     <SetupView v-else-if="state.view === 'setup' && state.setup" />
     <RunView v-else-if="state.view === 'run' && state.detail" />
     <div v-else class="flex-1 grid place-items-center text-[var(--muted)]">Loading…</div>

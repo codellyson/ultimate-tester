@@ -3,12 +3,19 @@
 import type { PlanItem, Flow } from '~/composables/useTester'
 const props = defineProps<{ item: PlanItem, finished: boolean, shots: number, details?: Flow, label?: string }>()
 defineEmits<{ pick: [name: string] }>()
-const { state } = useTester()
+const { state, setupAction } = useTester()
+// "Tess got this wrong": the correction becomes a lesson in the profile.
+const teaching = ref(false)
+const lesson = ref('')
+const taught = ref(false)
+async function teach() {
+  if (await setupAction('lesson', { text: lesson.value, check: props.item.name })) { taught.value = true; teaching.value = false; lesson.value = '' }
+}
 const st = computed(() => statusOf(props.item.status))
 const selected = computed(() => props.finished && state.sel.check === props.item.name)
 const canSelect = computed(() => props.finished && props.item.status !== 'pending')
 const tone = computed(() => ({ fail: 'text-[var(--bad)] font-medium', running: 'font-medium', pending: 'text-[var(--muted)]' } as Record<string, string>)[props.item.status] ?? '')
-const showNote = computed(() => selected.value && props.item.name !== OTHER && (props.item.note || props.details?.actual || props.details?.expected))
+const showNote = computed(() => selected.value && props.item.name !== OTHER)
 </script>
 
 <template>
@@ -28,6 +35,12 @@ const showNote = computed(() => selected.value && props.item.name !== OTHER && (
       <p v-if="item.note" class="text-[var(--ink)] leading-snug">{{ item.note }}</p>
       <p v-if="details?.expected && item.status !== 'pass'">Expected: {{ details.expected }}</p>
       <p v-if="details?.actual && item.status !== 'pass'">Saw: {{ details.actual }}</p>
+      <p v-if="taught" class="text-[var(--ok)]" role="status">Got it. I'll remember that on every run.</p>
+      <form v-else-if="teaching" class="flex flex-col gap-2" @submit.prevent="teach">
+        <textarea v-model="lesson" class="field min-h-16" maxlength="500" placeholder="What should I know next time? e.g. “The empty cart is expected for new merchants.”" aria-label="What Tess should know next time" @keydown.meta.enter="teach" />
+        <div class="flex gap-2"><button class="btn-blue" :disabled="!lesson.trim()">Teach Tess</button><button type="button" class="btn" @click="teaching = false">Cancel</button></div>
+      </form>
+      <button v-else class="link self-start text-[12px]" @click="teaching = true">Tess got this wrong?</button>
     </div>
   </li>
 </template>
