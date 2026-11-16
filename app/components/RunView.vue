@@ -220,11 +220,11 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
             </div>
             <TransitionGroup name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.problems" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
             <button
-              v-for="f in g.fixes" :key="f.who?.key ?? '-'" class="mt-1.5 mb-1 self-start text-start rounded-lg bg-[var(--surface)] ring-1 ring-[var(--line)] text-[var(--ink)] px-3 py-1.5 text-[13px] font-medium hover:bg-[var(--page)]"
+              v-for="f in g.fixes" :key="f.who?.key ?? '-'" class="mt-1.5 mb-1 self-stretch flex items-start gap-2 text-start rounded-lg bg-[var(--surface)] ring-1 ring-[var(--line)] text-[var(--ink)] px-3 py-1.5 text-[13px] font-medium hover:bg-[var(--page)]"
               @click="openSettings()"
             >
-              {{ f.who ? `Sign in as ${shortLabel(f.who.label)} to check ${f.n === 1 ? 'this' : `these ${f.n}`}` : `${f.n} check${plural(f.n)} couldn't run. Fix in Settings` }}
-              <ArrowRightIcon class="size-4 inline -mt-0.5 rtl:-scale-x-100" aria-hidden="true" />
+              <span class="flex-1 text-pretty">{{ f.who ? `Sign in as ${shortLabel(f.who.label)} to check ${f.n === 1 ? 'this' : `these ${f.n}`}` : `${f.n} check${plural(f.n)} couldn't run. Fix in Settings` }}</span>
+              <ArrowRightIcon class="size-4 shrink-0 mt-[3px] rtl:-scale-x-100" aria-hidden="true" />
             </button>
             <template v-if="g.passed.length">
               <button class="mt-1 py-1 text-start text-[13px] text-[var(--muted)] hover:text-[var(--ink)] flex gap-2" :aria-expanded="g.open" @click="toggleFold(g.gk)"><ChevronDownIcon :class="['size-4 mt-0.5 transition-[rotate] duration-150', g.open && 'rotate-180']" aria-hidden="true" /> {{ g.passed.length }} passed</button>
