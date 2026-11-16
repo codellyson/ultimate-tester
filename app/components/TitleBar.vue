@@ -54,11 +54,11 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
       <span class="size-1.5 rounded-full bg-[var(--warn)] pulse" aria-hidden="true" />Reconnecting…
     </span></Transition>
     <button
-      v-if="app" ref="newBtn" :class="['btn shrink-0 h-7 py-0', !state.offline && 'ms-auto']"
+      v-if="app && state.view !== 'onboard'" ref="newBtn" :class="['btn shrink-0 h-7 py-0', !state.offline && 'ms-auto']"
       aria-haspopup="true" :aria-expanded="state.menu === 'new'" @click.stop="toggle('new')"
     ><PlusIcon class="size-4 -ms-1" aria-hidden="true" />New test</button>
     <button
-      :class="['shrink-0 h-7 rounded-md bg-white/70 ring-1 ring-[var(--line)] px-2.5 text-[var(--muted)] flex items-center gap-2.5 hover:bg-white', !app && !state.offline && 'ms-auto']"
+      :class="['shrink-0 h-7 rounded-md bg-white/70 ring-1 ring-[var(--line)] px-2.5 text-[var(--muted)] flex items-center gap-2.5 hover:bg-white', (!app || state.view === 'onboard') && !state.offline && 'ms-auto']"
       aria-label="Commands (⌘K)" @click="state.menu = null; state.cmdk = true"
     ><kbd class="text-[11px] font-sans">⌘K</kbd></button>
 

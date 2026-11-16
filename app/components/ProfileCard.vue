@@ -53,11 +53,11 @@ async function save() {
             </template>
           </p>
         </div>
-        <button v-if="editing !== row.head" class="link text-[12px] self-start shrink-0" :aria-label="`Edit ${row.label}`" @click="edit(row.head)">{{ row.head in sections ? 'Edit' : 'Add' }}</button>
+        <button v-if="editing !== row.head" class="link-quiet text-[12px] self-start shrink-0" :aria-label="`Edit ${row.label}`" @click="edit(row.head)">{{ row.head in sections ? 'Edit' : 'Add' }}</button>
       </div>
       <div class="px-5 py-3 text-[12px] text-[var(--muted)] flex gap-3">
         <span>Saved as .ultimate-tester.md in the repo</span>
-        <button class="link ms-auto" @click="edit('*')">Open as Markdown</button>
+        <button class="link-quiet ms-auto" @click="edit('*')">Open as Markdown</button>
       </div>
     </template>
   </div>

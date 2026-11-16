@@ -34,6 +34,8 @@ body {
 @layer components {
   .btn { @apply inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] ring-1 ring-[var(--line)] bg-white/70 hover:bg-white active:scale-[0.96] transition-[scale,background-color] duration-150 disabled:opacity-40 disabled:pointer-events-none; }
   .btn-blue { @apply inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] font-medium bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[color-mix(in_srgb,var(--accent)_82%,white)] shadow-sm active:scale-[0.96] transition-[scale,background-color] duration-150 disabled:opacity-40 disabled:pointer-events-none; }
+  /* Quiet row actions (Edit, Add): muted until hovered, so a card of them reads as one list. */
+  .link-quiet { @apply text-[var(--muted)] hover:text-[var(--ink)] hover:underline underline-offset-2; }
   .link { @apply text-[var(--ink)] underline decoration-[var(--line)] underline-offset-2 hover:decoration-current; }
   .field { @apply w-full rounded-lg bg-white ring-1 ring-[var(--line)] focus:ring-2 focus:ring-[var(--accent)] outline-none px-2.5 py-1.5 text-[13px]; }
   .crumb { @apply h-7 flex items-center gap-1.5 rounded-md px-1.5 hover:bg-black/5 aria-expanded:bg-black/5; }

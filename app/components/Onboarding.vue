@@ -176,7 +176,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
           <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="What to test">
             <button
               v-for="(t, i) in TARGETS.slice(0, 3)" :key="t.label" role="radio" :aria-checked="target === i"
-              :class="['rounded-full px-3 py-1 text-[12px]', target === i ? 'bg-[var(--accent-soft)] text-[var(--accent)] font-medium' : 'bg-[var(--sand)] hover:bg-[var(--line)]']"
+              :class="['rounded-full px-3 py-1 text-[12px]', target === i ? 'bg-[var(--ink)] text-white font-medium' : 'bg-[var(--sand)] hover:bg-[var(--line)]']"
               @click="target = i"
             >
               <CheckIcon v-if="target === i" class="size-3.5 inline -mt-0.5 me-0.5" aria-hidden="true" />{{ t.label }}</button>
