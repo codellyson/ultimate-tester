@@ -22,7 +22,7 @@ const showNote = computed(() => selected.value && props.item.name !== OTHER)
   <li>
     <component
       :is="canSelect ? 'button' : 'div'" :data-check="canSelect ? item.name : undefined"
-      :aria-pressed="canSelect ? selected : undefined" :aria-controls="canSelect ? 'panel-checks' : undefined"
+      :aria-pressed="canSelect ? selected : undefined" :aria-controls="canSelect ? 'evidence' : undefined"
       :class="['w-full text-start py-1.5 px-2 -mx-2 flex gap-2 rounded-lg', selected ? 'bg-[var(--sand)]' : canSelect && 'hover:bg-[var(--sand)]/60', tone]"
       @click="canSelect && $emit('pick', item.name)"
     >

@@ -255,7 +255,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
   <section class="flex-1 min-w-0 min-h-0 flex flex-col">
     <div class="shrink-0 px-6 py-4 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-[var(--line)]">
       <p class="sr-only" role="status">{{ finished && v ? `${verdict.lead}${verdict.em}` : '' }}</p>
-      <h1 class="display text-[26px] leading-tight font-medium text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
+      <h1 class="display selectable text-[26px] leading-tight font-medium text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
       <!-- What to do next: hand a problem to Claude Code, or run it again. -->
       <div v-if="finished && r.change" class="flex gap-2 self-center">
         <button v-if="v && v.status !== 'pass' && r.status !== 'stopped'" class="btn-blue" title="Copy the report for Claude Code (⇧⌘C)" @click="copyReport">{{ copied ? 'Copied' : 'Copy for Claude Code' }}</button>
@@ -278,7 +278,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
     </div>
 
     <div class="flex-1 min-h-0 flex flex-col overflow-y-auto min-[880px]:flex-row min-[880px]:overflow-visible">
-      <main class="flex-1 min-w-0 p-4 flex flex-col gap-3" aria-label="What Tess saw">
+      <main id="evidence" class="flex-1 min-w-0 p-4 flex flex-col gap-3" aria-label="What Tess saw">
         <div v-if="!noEvidence" :class="['relative rounded-2xl overflow-hidden surface flex flex-col', noEvidence ? 'shrink-0 h-28 bg-[var(--surface)]' : 'flex-1 min-h-[50vh] min-[880px]:min-h-0 bg-[var(--canvas)] text-zinc-900']">
           <div class="h-8 shrink-0 bg-[var(--sand)] border-b border-[var(--line)] flex items-center px-3 text-[12px] text-[var(--muted)] gap-2 min-w-0">
             <span v-if="live" class="size-1.5 rounded-full bg-rose-500 pulse shrink-0" />

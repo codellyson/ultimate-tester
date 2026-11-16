@@ -16,7 +16,7 @@ const commands = computed<Cmd[]>(() => {
   if (state.setup?.running) list.push({ group: 'Test', label: 'Stop the running test', hint: '⌘.', run: stopTest })
   for (const t of targetsFor(state.setup?.remotes)) list.push({ group: 'Test', label: `Test ${t.label.toLowerCase()}`, hint: t.hint, run: () => startTest(t) })
   list.push({ group: 'Test', label: 'Test something else…', run: () => startTest({ kind: 'custom' }) })
-  for (const p of state.setup?.personas ?? []) if (p.signIn) list.push({ group: 'Sign in as', label: shortLabel(p.label), hint: p.savedAt ? 'signed in' : 'not signed in', run: openSettings })
+  for (const p of state.setup?.personas ?? []) if (p.signIn) list.push({ group: 'Sign in as', label: shortLabel(p.label), hint: p.savedAt ? 'signed in · opens Settings' : 'opens Settings', run: openSettings })
   for (const a of state.apps) if (a.id !== state.appId) list.push({ group: 'Apps', label: `Switch to ${a.name}`, run: () => selectApp(a.id) })
   list.push({ group: 'Apps', label: 'Add an app…', run: () => addApp() })
   return list

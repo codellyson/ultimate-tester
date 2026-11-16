@@ -83,7 +83,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
       </ol>
       <!-- Reopened from Help ▸ Getting Started on an app that is set up: just go back. -->
       <button v-if="state.appId && s?.onboarded" class="link text-[12px] shrink-0" @click="selectApp(state.appId!)">Back to tests</button>
-      <button v-else-if="state.appId && step > 1" class="link text-[12px] shrink-0" @click="skip">Skip setup</button>
+      <button v-else-if="state.appId && step > 1" class="link text-[12px] shrink-0" title="Finish the rest later in Settings (⌘,)" @click="skip">Skip the rest</button>
     </nav>
 
     <Transition name="step" mode="out-in">
@@ -120,7 +120,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
           <button class="btn" :disabled="!ready" @click="addSample()">Try it on a sample app first</button>
           <button v-if="pre && !ready" class="link text-[12px] self-center" @click="recheck">Check again</button>
         </div>
-        <p class="text-[12px] text-[var(--muted)]">Nothing leaves this Mac except what Claude Code already sends. I never see passwords.</p>
+        <p class="text-[12px] text-[var(--muted)]">Tess works here on your Mac. What she sees goes to Claude through your own Claude Code, as when you use it yourself. I never see passwords.</p>
       </template>
 
       <!-- 1 · Read the app -->

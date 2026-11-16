@@ -1,6 +1,7 @@
 // Ultimate Tester desktop app: a native window over the same engine page the web version uses.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,8 +15,24 @@ struct Engine(Arc<Mutex<Option<Child>>>);
 // Whether any app has a test running, as the page last reported it.
 struct Testing(AtomicBool);
 
-fn engine_up() -> bool {
-    TcpStream::connect_timeout(&"127.0.0.1:4600".parse().unwrap(), Duration::from_millis(300)).is_ok()
+// Who is on port 4600: our engine (its /health names it), something else, or nothing.
+// Only our engine is trusted: the window loads it and it gets the app's native permissions.
+#[derive(PartialEq)]
+enum Port { Ours, Other, Free }
+
+fn engine_port() -> Port {
+    let Ok(mut s) = TcpStream::connect_timeout(&"127.0.0.1:4600".parse().unwrap(), Duration::from_millis(300)) else { return Port::Free };
+    let _ = s.set_read_timeout(Some(Duration::from_millis(800)));
+    let _ = s.write_all(b"GET /health HTTP/1.0\r\nHost: localhost:4600\r\n\r\n");
+    let mut body = String::new();
+    let _ = s.read_to_string(&mut body);
+    if body.contains("\"service\":\"ultimate-tester\"") { Port::Ours } else { Port::Other }
+}
+
+// Asked by the launch page before it opens the engine.
+#[tauri::command]
+fn engine_status() -> &'static str {
+    match engine_port() { Port::Ours => "ours", Port::Other => "other", Port::Free => "starting" }
 }
 
 // Starts the Node engine through the user's own shell, interactive and login (-ilc), so it gets the same
@@ -36,7 +53,8 @@ fn spawn_engine() -> Option<Child> {
 // (another copy quitting, a restart), and then the app starts its own.
 fn watch_engine(slot: Arc<Mutex<Option<Child>>>) {
     thread::spawn(move || loop {
-        if !engine_up() {
+        // Start ours only when the port is free; never fight another program for it.
+        if engine_port() == Port::Free {
             let mut child = slot.lock().unwrap();
             let ours_alive = child.as_mut().map(|c| matches!(c.try_wait(), Ok(None))).unwrap_or(false);
             if !ours_alive {
@@ -115,6 +133,9 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<(Menu<tauri::Wry>, MenuHa
         &Submenu::with_items(app, "Window", true, &[
             &PredefinedMenuItem::minimize(app, None)?,
             &PredefinedMenuItem::maximize(app, None)?,
+            &sep()?,
+            // Brings the main window back after it was closed (any menu command shows it).
+            &item("main-window", "Ultimate Tester", Some("CmdOrCtrl+0"))?,
         ])?,
         &Submenu::with_items(app, "Help", true, &[
             &item("getting-started", "Getting Started", None)?,
@@ -217,7 +238,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .manage(Engine(slot))
         .manage(Testing(AtomicBool::new(false)))
-        .invoke_handler(tauri::generate_handler![open_settings, set_menu_state])
+        .invoke_handler(tauri::generate_handler![open_settings, set_menu_state, engine_status])
         .setup(|app| {
             let (menu, handles) = build_menu(app.handle())?;
             app.set_menu(menu)?;
@@ -257,8 +278,9 @@ fn main() {
                 app.dialog()
                     .message("Tess is still testing. If you quit, the test finishes in the background and its result is here next time you open Ultimate Tester, but you won't get a notification.")
                     .title("Quit while Tess is testing?")
-                    .buttons(MessageDialogButtons::OkCancelCustom("Quit".into(), "Keep Open".into()))
-                    .show(move |quit| if quit { handle.exit(0) });
+                    // "Keep Open" is the default (Return), so a reflexive ⌘Q-Return doesn't quit mid-test.
+                    .buttons(MessageDialogButtons::OkCancelCustom("Keep Open".into(), "Quit".into()))
+                    .show(move |keep| if !keep { handle.exit(0) });
             }
             RunEvent::Exit => {
                 if let Some(mut child) = app.state::<Engine>().0.lock().unwrap().take() {

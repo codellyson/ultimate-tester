@@ -6,6 +6,8 @@ function onKey(e: KeyboardEvent) {
   if (state.inSettings) return
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); state.menu = null; state.cmdk = true; return }
   if (e.key === 'Escape') state.menu = null
+  // In the Mac app ⌘N and ⌘1–⌘4 are menu items; these are for the web version.
+  if (!tauri() && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n' && state.appId && state.view !== 'onboard') { e.preventDefault(); state.menu = 'new'; return }
   // In the Mac app ⌘1–⌘4 are View menu items; this is for the web version.
   if (!tauri() && (e.metaKey || e.ctrlKey) && /^[1-4]$/.test(e.key)) {
     const r = state.runs[Number(e.key) - 1]

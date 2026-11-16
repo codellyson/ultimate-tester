@@ -14,12 +14,16 @@
   <div><div class="dot">T</div><p id="msg"></p></div>
   <script>
     // The engine is a local Node server the app starts; open it as soon as it answers.
+    // Opens the engine only once the app has confirmed it is Ultimate Tester's own (not just anything on port 4600).
     (async function wait(tries = 0) {
-      // no-cors: this page is another origin, so it can only learn that the engine answered, which is enough.
-      try { await fetch('http://localhost:4600/health', { mode: 'no-cors' }); location.replace('http://localhost:4600/' + location.search); return; } catch {}
+      let status = 'starting';
+      try { status = await window.__TAURI__.core.invoke('engine_status'); } catch {}
+      if (status === 'ours') { location.replace('http://localhost:4600/' + location.search); return; }
+      const msg = document.getElementById('msg');
       // Quiet for the usual second or two; words only if it is slow, then a way forward if it never comes.
-      if (tries === 6) document.getElementById('msg').textContent = 'Starting Tess…';
-      if (tries === 60) document.getElementById('msg').innerHTML = 'Tess needs Node.js 20 or newer to run.<br>Install it from nodejs.org, then open Ultimate Tester again.';
+      if (status === 'other' && tries >= 6) msg.innerHTML = 'Another program is using port 4600, so Tess can\u2019t start.<br>Quit it, then open Ultimate Tester again.';
+      else if (tries === 6) msg.textContent = 'Starting Tess\u2026';
+      else if (tries === 60) msg.innerHTML = 'Tess needs Node.js 20 or newer to run.<br>Install it from nodejs.org, then open Ultimate Tester again.';
       setTimeout(() => wait(tries + 1), 500);
     })();
   </script>
