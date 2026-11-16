@@ -18,13 +18,16 @@ fn engine_up() -> bool {
     TcpStream::connect_timeout(&"127.0.0.1:4600".parse().unwrap(), Duration::from_millis(300)).is_ok()
 }
 
-// Starts the Node engine. A login shell gives it the user's PATH, which a GUI app on macOS does not get.
+// Starts the Node engine through the user's own shell, interactive and login (-ilc), so it gets the same
+// PATH as their Terminal: nvm, fnm and volta set Node up in .zshrc, which a login-only shell skips.
 fn spawn_engine() -> Option<Child> {
     let cli = option_env!("ULTIMATE_TESTER_CLI")
         .map(String::from)
         .unwrap_or_else(|| format!("{}/../bin/ultimate-tester.js", env!("CARGO_MANIFEST_DIR")));
-    Command::new("/bin/zsh")
-        .args(["-lc", &format!("exec node {:?} serve", cli)])
+    let shell = std::env::var("SHELL").ok().filter(|s| s.starts_with('/')).unwrap_or_else(|| "/bin/zsh".into());
+    Command::new(shell)
+        .args(["-ilc", &format!("exec node {:?} serve", cli)])
+        .stdin(std::process::Stdio::null())
         .spawn()
         .ok()
 }
@@ -166,6 +169,37 @@ async fn open_settings(app: tauri::AppHandle, app_id: String) -> Result<(), Stri
     Ok(())
 }
 
+// The main window's size and position, kept in logical points so a display with different scaling
+// can't grow or shrink it (the window-state plugin did: 1240 → 3600 px across launches).
+fn frame_file(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_config_dir().ok().map(|d| d.join("main-window.txt"))
+}
+
+fn save_frame(window: &tauri::Window) {
+    let (Ok(size), Ok(pos), Ok(scale)) = (window.inner_size(), window.outer_position(), window.scale_factor()) else { return };
+    if window.is_minimized().unwrap_or(false) || window.is_fullscreen().unwrap_or(false) { return; }
+    let (size, pos) = (size.to_logical::<f64>(scale), pos.to_logical::<f64>(scale));
+    if let Some(f) = frame_file(window.app_handle()) {
+        let _ = std::fs::create_dir_all(f.parent().unwrap());
+        let _ = std::fs::write(f, format!("{} {} {} {}", size.width, size.height, pos.x, pos.y));
+    }
+}
+
+fn restore_frame(app: &tauri::AppHandle) {
+    let (Some(f), Some(w)) = (frame_file(app), app.get_webview_window("main")) else { return };
+    let Ok(text) = std::fs::read_to_string(f) else { return };
+    let v: Vec<f64> = text.split_whitespace().filter_map(|n| n.parse().ok()).collect();
+    let [width, height, x, y] = v[..] else { return };
+    if width < 900.0 || height < 560.0 { return; }
+    let _ = w.set_size(tauri::LogicalSize::new(width, height));
+    // Only put it back where a display still is; otherwise leave the default position.
+    let on_screen = app.available_monitors().unwrap_or_default().iter().any(|m| {
+        let (p, s) = (m.position().to_logical::<f64>(m.scale_factor()), m.size().to_logical::<f64>(m.scale_factor()));
+        x + 100.0 > p.x && x < p.x + s.width - 100.0 && y >= p.y - 10.0 && y < p.y + s.height - 100.0
+    });
+    if on_screen { let _ = w.set_position(tauri::LogicalPosition::new(x, y)); }
+}
+
 fn show_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -189,6 +223,7 @@ fn main() {
             app.set_menu(menu)?;
             app.manage(handles);
             build_settings(app.handle())?;
+            restore_frame(app.handle());
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -198,6 +233,9 @@ fn main() {
             let _ = app.emit_to("main", "menu", id.to_string());
         })
         .on_window_event(|window, event| {
+            if matches!(event, WindowEvent::Resized(_) | WindowEvent::Moved(_)) && window.label() == "main" {
+                save_frame(window);
+            }
             // Closing a window hides it: tests keep running, results still arrive, Settings stays loaded.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" || window.label() == "settings" {

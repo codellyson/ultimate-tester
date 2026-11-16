@@ -126,7 +126,10 @@ async function refresh() {
   }
 }
 
+// The app you were on comes back next launch (per-viewer convenience; storage may be unavailable).
+const LAST_APP = 'ut.lastApp'
 function selectApp(id: string) {
+  if (!state.inSettings) try { localStorage.setItem(LAST_APP, id) } catch {}
   Object.assign(state, { appId: id, runId: null, follow: true, setup: null, detail: null, plan: [], view: null })
   history.replaceState(null, '', `?app=${id}`)
   refresh()
@@ -249,13 +252,17 @@ async function boot() {
     window.addEventListener('focus', () => { unseenProblems = false; announce(state.apps) })
   }
   await loadApps().catch(() => {})
-  state.appId = params.get('app')
+  state.appId = params.get('app') ?? (() => { try { return localStorage.getItem(LAST_APP) } catch { return null } })()
   if (!state.appId || !state.apps.some((a) => a.id === state.appId)) state.appId = state.apps[0]?.id ?? null
   // Polling starts even with no app yet, so the first app added gets live updates.
+  // Every second only while something is happening; otherwise every 10s, and at once when the window comes back.
+  let tick = 0
   setInterval(() => {
     const s = state.setup
-    if (state.view === 'run' || state.view === 'onboard' || s?.job?.status === 'working' || s?.signingIn) refresh()
+    const busy = s?.running || s?.job?.status === 'working' || !!s?.signingIn || state.detail?.status === 'running'
+    if (busy || ++tick % 10 === 0) refresh()
   }, 1000)
+  window.addEventListener('focus', () => refresh())
   setInterval(() => loadApps().catch(() => {}), 5000)
   bootDone = true
   if (!state.appId) return

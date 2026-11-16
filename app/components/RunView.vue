@@ -98,7 +98,7 @@ const screen = computed(() => {
   }
   // A browser that never left about:blank is not evidence of anything.
   if (r.value.live && r.value.live.url !== 'about:blank') return { src: `/api/apps/${state.appId}/shots/${r.value.id}/live.jpg?t=${liveTick.value}`, alt: 'Live view of the app being tested', label: `${live.value ? 'Live' : 'Last screen'} · ${r.value.live.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
-  return { src: null, empty: live.value ? 'Tess is reading the change. The app shows up here once she opens it.' : (r.value.live ? "Tess never reached the app, so there's no screen to show. Her note in the checklist says why." : 'No screen was recorded for this test.'), label: '' }
+  return { src: null, empty: live.value ? 'Tess is reading the change. The app shows up here once she opens it.' : (r.value.live ? "Tess never reached the app, so there's no screen to show. Her note in the checklist says why." : 'No screen was recorded for this test.'), label: live.value ? '' : 'No screen' }
 })
 // Evidence up close: click or Space for full size; drag it out; right-click to copy or find the file.
 const zoomed = ref(false)
