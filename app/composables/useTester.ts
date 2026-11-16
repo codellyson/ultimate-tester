@@ -2,7 +2,7 @@
 import type { Target } from '~/utils/format'
 
 export type App = { id: string, name: string, root: string, profileReady: boolean, signedIn: boolean, running: boolean, last: RunInfo | null }
-export type RunInfo = { id: string, status: string, summary: string, title: string, kind?: string | null, target?: string | null, note?: string }
+export type RunInfo = { id: string, status: string, summary: string, title: string, kind?: string | null, target?: string | null, note?: string, counts?: { pass: number, fail: number, unk: number }, shotCount?: number }
 export type PlanItem = { name: string, why?: string, source?: string, status: string, note?: string, persona?: string }
 export type Flow = { name: string, status: string, steps?: string[], expected?: string, actual?: string, evidence?: string[], persona?: string }
 export type Verdict = { status: string, summary: string, flows: Flow[], durationMs?: number, usage?: string }
@@ -172,7 +172,9 @@ async function startTest(t: Target) {
     await api(`/api/apps/${state.appId}/run`, { kind, target, note: state.note })
     state.note = ''
     state.follow = true
-    if (!state.inSettings) setTimeout(() => show('run'), 900)
+    // Jump to the new test only if the person is still where they started it from.
+    const from = { app: state.appId, view: state.view }
+    if (!state.inSettings) setTimeout(() => { if (state.appId === from.app && state.view === from.view) show('run') }, 900)
   } catch (e) { state.flash = (e as Error).message }
 }
 
@@ -256,10 +258,15 @@ async function boot() {
   if (t) document.addEventListener('contextmenu', (e) => {
     if (!(e.target as HTMLElement).closest?.('input, textarea, .selectable, .mono')) e.preventDefault()
   })
+  // Both windows tell the app about an unsaved edit, so ⌘Q can ask before throwing it away.
+  if (t?.core) watch(() => state.draftDirty, (d) => { t.core?.invoke('set_draft', { dirty: d }).catch(() => {}) })
   if (state.inSettings) {
     // Settings stays loaded while hidden, so it re-reads the profile every time it is shown or focused.
     // Never switch apps under an unsaved edit; the person finishes or cancels it first.
-    t?.event?.listen('settings-app', (e) => { if (e.payload && e.payload !== state.appId && !state.draftDirty) selectApp(e.payload); else refresh() })
+    t?.event?.listen('settings-app', (e) => {
+      if (e.payload && e.payload !== state.appId && state.draftDirty) { state.flash = 'Finish or cancel your edit to switch Settings to another app.'; return }
+      if (e.payload && e.payload !== state.appId) selectApp(e.payload); else refresh()
+    })
     window.addEventListener('focus', () => refresh())
   }
   if (!state.inSettings && t?.core) {

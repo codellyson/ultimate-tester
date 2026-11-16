@@ -357,6 +357,12 @@
           "markdownDescription": "Enables the open_settings command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_draft command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-draft",
+          "markdownDescription": "Enables the set_draft command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_menu_state command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-menu-state",
@@ -373,6 +379,12 @@
           "type": "string",
           "const": "deny-open-settings",
           "markdownDescription": "Denies the open_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_draft command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-draft",
+          "markdownDescription": "Denies the set_draft command without any pre-configured scope."
         },
         {
           "description": "Denies the set_menu_state command without any pre-configured scope.",

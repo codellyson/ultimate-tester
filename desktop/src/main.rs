@@ -14,6 +14,13 @@ use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 struct Engine(Arc<Mutex<Option<Child>>>);
 // Whether any app has a test running, as the page last reported it.
 struct Testing(AtomicBool);
+// Whether either window has an unsaved profile edit open.
+struct Draft(AtomicBool);
+
+#[tauri::command]
+fn set_draft(app: tauri::AppHandle, dirty: bool) {
+    app.state::<Draft>().0.store(dirty, Ordering::Relaxed);
+}
 
 // Who is on port 4600: our engine (its /health names it), something else, or nothing.
 // Only our engine is trusted: the window loads it and it gets the app's native permissions.
@@ -238,7 +245,8 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .manage(Engine(slot))
         .manage(Testing(AtomicBool::new(false)))
-        .invoke_handler(tauri::generate_handler![open_settings, set_menu_state, engine_status])
+        .manage(Draft(AtomicBool::new(false)))
+        .invoke_handler(tauri::generate_handler![open_settings, set_menu_state, engine_status, set_draft])
         .setup(|app| {
             let (menu, handles) = build_menu(app.handle())?;
             app.set_menu(menu)?;
@@ -249,8 +257,9 @@ fn main() {
         })
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
-            // Menu commands act on the main window, so bring it back if it was closed.
-            show_main(app);
+            // Menu commands act on the main window, so bring it back if it was closed
+            // (except Settings…, which opens its own window and shouldn't flash the main one forward).
+            if id != "settings" { show_main(app); }
             let _ = app.emit_to("main", "menu", id.to_string());
         })
         .on_window_event(|window, event| {
@@ -271,16 +280,24 @@ fn main() {
             RunEvent::Reopen { .. } => show_main(app),
             // Quitting (⌘Q) mid-test: say what happens rather than quit silently. Tests run on their own,
             // so they finish anyway; only the window and its notifications go away.
-            RunEvent::ExitRequested { api, code: None, .. } if app.state::<Testing>().0.load(Ordering::Relaxed) => {
+            // Quitting (⌘Q) with something to lose asks first, "keep" being the default (Return):
+            // an unsaved profile edit would be lost; a running test finishes in the background without a notification.
+            RunEvent::ExitRequested { api, code: None, .. }
+                if app.state::<Draft>().0.load(Ordering::Relaxed) || app.state::<Testing>().0.load(Ordering::Relaxed) =>
+            {
                 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
                 api.prevent_exit();
                 let handle = app.clone();
+                let (title, message, keep) = if app.state::<Draft>().0.load(Ordering::Relaxed) {
+                    ("Quit and discard your edit?", "You have unsaved changes to how Tess tests this app. Quitting throws them away.", "Keep Editing")
+                } else {
+                    ("Quit while Tess is testing?", "Tess is still testing. If you quit, the test finishes in the background and its result is here next time you open Ultimate Tester, but you won't get a notification.", "Keep Open")
+                };
                 app.dialog()
-                    .message("Tess is still testing. If you quit, the test finishes in the background and its result is here next time you open Ultimate Tester, but you won't get a notification.")
-                    .title("Quit while Tess is testing?")
-                    // "Keep Open" is the default (Return), so a reflexive ⌘Q-Return doesn't quit mid-test.
-                    .buttons(MessageDialogButtons::OkCancelCustom("Keep Open".into(), "Quit".into()))
-                    .show(move |keep| if !keep { handle.exit(0) });
+                    .message(message)
+                    .title(title)
+                    .buttons(MessageDialogButtons::OkCancelCustom(keep.into(), "Quit".into()))
+                    .show(move |stay| if !stay { handle.exit(0) });
             }
             RunEvent::Exit => {
                 if let Some(mut child) = app.state::<Engine>().0.lock().unwrap().take() {

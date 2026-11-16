@@ -14,6 +14,7 @@
     "allow-open-settings",
     "allow-set-menu-state",
     "allow-engine-status",
+    "allow-set-draft",
     "dialog:allow-open",
     "dialog:allow-ask",
     "notification:default",

@@ -20,6 +20,16 @@ const groups = computed(() => {
   }
   return out
 })
+// The result in words, so tests with the same name can be told apart at a glance.
+function outcome(r: RunInfo) {
+  const c = r.counts
+  if (r.status === 'running') return 'Testing now'
+  if (r.status === 'stopped') return 'Stopped'
+  if (r.status === 'pass') return 'Passed'
+  if (r.status === 'fail') return `${c?.fail || 'Some'} broke`
+  if (!r.shotCount) return "Couldn't reach app"
+  return `${c?.unk || 'Some'} can't check`
+}
 const current = computed(() => (state.view === 'run' ? state.runId : null))
 const open = (r: RunInfo) => openRun(r.id, r.id === state.runs[0]?.id)
 
@@ -42,7 +52,7 @@ async function menu(e: MouseEvent, r: RunInfo) {
   const m = await t.menu.Menu.new({ items: [
     { text: 'Open', action: () => open(r) },
     { text: 'Run Again', enabled: r.status !== 'running', action: () => rerun(r) },
-    { text: 'Copy Verdict', enabled: !!r.summary, action: () => navigator.clipboard.writeText(r.summary) },
+    { text: 'Copy Verdict', enabled: !!r.summary, action: () => navigator.clipboard.writeText(`${outcome(r)}: ${r.summary}`) },
     { text: 'Show in Finder', enabled: !!dir && !!t.opener, action: () => { if (dir) t.opener?.revealItemInDir(dir) } },
   ] })
   await m.popup()
@@ -63,7 +73,7 @@ async function menu(e: MouseEvent, r: RunInfo) {
           <component :is="statusOf(r.status).icon" :class="['size-4 shrink-0 mt-px', statusOf(r.status).cls]" aria-hidden="true" />
           <span class="flex-1 min-w-0">
             <span class="block truncate">{{ short(r.title) }}</span>
-            <span class="block text-[11px] text-[var(--muted)] tabular-nums"><span class="sr-only">{{ statusOf(r.status).word }}, </span>{{ new Date(started(r.id)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }}</span>
+            <span class="block text-[11px] text-[var(--muted)] tabular-nums">{{ outcome(r) }} · {{ new Date(started(r.id)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }}</span>
           </span>
         </button>
       </div>

@@ -74,6 +74,8 @@ const tested = computed(() => {
 })
 // A plain-text report a coding agent can act on: verdict, what was tested, and each problem with its evidence.
 const copied = ref(false)
+// Tess got no evidence and nothing broke: the environment, not the code, is the likely problem.
+const retryFirst = computed(() => r.value.status === 'stopped' || (!!v.value && !fail.value && !r.value.shots.length))
 async function copyReport() {
   if (!v.value) { state.flash = 'Open a finished test to copy its report.'; return }
   const app = state.apps.find((a) => a.id === state.appId)
@@ -259,8 +261,10 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
       <h1 class="display selectable text-[26px] leading-tight font-medium text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
       <!-- What to do next: hand a problem to Claude Code, or run it again. -->
       <div v-if="finished && r.change" class="flex gap-2 self-center">
-        <button v-if="v && v.status !== 'pass' && r.status !== 'stopped'" class="btn-blue" title="Copy the report for Claude Code (⇧⌘C)" @click="copyReport">{{ copied ? 'Copied' : 'Copy for Claude Code' }}</button>
-        <button class="btn" title="Run this test again (⌘R)" :disabled="!!state.setup?.running" @click="rerun()">Run again</button>
+        <!-- Code problems go to Claude Code; when Tess never reached the app, running again is the fix. -->
+        <button :class="retryFirst ? 'btn-blue' : 'btn'" title="Run this test again (⌘R)" :disabled="!!state.setup?.running" @click="rerun()">Run again</button>
+        <button v-if="v && v.status !== 'pass' && r.status !== 'stopped'" :class="retryFirst ? 'btn' : 'btn-blue'" title="Copy the report for Claude Code (⇧⌘C)" @click="copyReport">{{ copied ? 'Copied' : 'Copy for Claude Code' }}</button>
+        <span class="sr-only" role="status">{{ copied ? 'Report copied' : '' }}</span>
       </div>
       <p class="text-[var(--muted)] flex flex-wrap gap-x-1.5" :title="v?.usage">
         <template v-for="(m, i) in meta" :key="m.text"><span v-if="i" aria-hidden="true">·</span><span :class="m.cls">{{ m.text }}</span></template>
@@ -270,7 +274,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
       <!-- While Tess works, Stop is right here, not only in the Test menu (⌘.). -->
       <button v-if="live && state.setup?.running" class="btn self-center min-[880px]:order-last" title="Stop this test (⌘.)" @click="stopTest()">Stop</button>
       <div v-if="live" class="w-full min-[880px]:w-[320px] min-[880px]:ms-auto self-center">
-        <div class="flex h-2 rounded-full overflow-hidden bg-[var(--sand)]">
+        <div class="flex h-2 rounded-full overflow-hidden bg-[var(--sand)]" role="progressbar" aria-label="Checks done" :aria-valuemin="0" :aria-valuemax="plan.length" :aria-valuenow="plan.length - todo" :aria-valuetext="`${plan.length - todo} of ${plan.length} checks done`">
           <span v-for="(b, i) in bar" :key="i" :class="['transition-[width] duration-300 ease-out', i === 3 && 'pulse']" :style="{ width: b.width, background: b.color }" />
         </div>
         <p class="mt-1.5 text-[12px] text-[var(--muted)]">{{ pass }} passed<template v-if="fail"> · <b class="text-[var(--bad)]">{{ fail }} broke</b></template><template v-if="unk"> · <b class="text-[var(--warn)]">{{ unk }} can't check</b></template> · {{ todo }} to go</p>
@@ -303,7 +307,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
         </div>
         <!-- Tess speaks under the screen, never over the evidence. -->
         <div class="shrink-0 flex items-end gap-3">
-          <div class="tess breathe size-11 rounded-full shrink-0 shadow-md" aria-hidden="true" />
+          <div :class="['tess size-11 rounded-full shrink-0 shadow-md', live && 'breathe']" aria-hidden="true" />
           <!-- One stable live region (so screen readers hear each new line); only its content re-animates. -->
           <div class="flex-1 min-w-0 rounded-2xl rounded-es-sm bg-[var(--bubble)] text-[var(--bubble-fg)] px-5 py-3 shadow-sm max-w-3xl max-h-[28vh] overflow-y-auto" :style="{ boxShadow: bubbleEdge }" aria-live="polite">
             <div :key="bubble" class="rise">
@@ -344,7 +348,6 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
               <div v-else class="mt-1.5 mb-1 rounded-lg bg-[var(--surface)] ring-1 ring-[var(--line)] px-3 py-2 flex flex-col gap-1.5">
                 <p class="font-medium">{{ f.n }} check{{ plural(f.n) }} couldn't run</p>
                 <p v-if="blockerNote(g)" class="selectable text-[12px] text-[var(--muted)] text-pretty">{{ blockerNote(g) }}</p>
-                <button class="btn self-start" :disabled="!!state.setup?.running" @click="rerun()">Run again</button>
               </div>
             </template>
             <template v-if="g.passed.length">

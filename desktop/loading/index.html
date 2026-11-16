@@ -23,7 +23,7 @@
       // Quiet for the usual second or two; words only if it is slow, then a way forward if it never comes.
       if (status === 'other' && tries >= 6) msg.innerHTML = 'Another program is using port 4600, so Tess can\u2019t start.<br>Quit it, then open Ultimate Tester again.';
       else if (tries === 6) msg.textContent = 'Starting Tess\u2026';
-      else if (tries === 60) msg.innerHTML = 'Tess needs Node.js 20 or newer to run.<br>Install it from nodejs.org, then open Ultimate Tester again.';
+      else if (tries === 60) msg.innerHTML = 'Tess is taking too long to start.<br>Check that Node.js 20 or newer is installed (nodejs.org), then open Ultimate Tester again.';
       setTimeout(() => wait(tries + 1), 500);
     })();
   </script>

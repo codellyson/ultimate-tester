@@ -8,9 +8,19 @@ const needs = computed(() => s.value.personas.filter((p) => p.signIn && !p.saved
 
 // The installed trigger, changed in place: picking one installs it and removes the other.
 const savingTrigger = ref(false)
+const installed = () => (s.value.triggers.stop ? 'stop' : s.value.triggers.commit ? 'commit' : 'manual')
+// What the radios show: the choice while it installs, then whatever is really installed (also after a failure).
+const pick = ref<'stop' | 'commit' | 'manual'>(installed())
+watch(() => s.value.triggers, () => { if (!savingTrigger.value) pick.value = installed() }, { deep: true })
 const trigger = computed<'stop' | 'commit' | 'manual'>({
-  get: () => (s.value.triggers.stop ? 'stop' : s.value.triggers.commit ? 'commit' : 'manual'),
-  set: async (mode) => { savingTrigger.value = true; await setupAction('trigger', { mode }); savingTrigger.value = false },
+  get: () => pick.value,
+  set: async (mode) => {
+    pick.value = mode
+    savingTrigger.value = true
+    await setupAction('trigger', { mode })
+    savingTrigger.value = false
+    pick.value = installed()
+  },
 })
 async function draft() { if (await setupAction('draft')) state.confirmJustDrafted = true }
 </script>

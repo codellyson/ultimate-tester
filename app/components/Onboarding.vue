@@ -2,7 +2,7 @@
 import { CheckIcon, PlusIcon } from '@heroicons/vue/16/solid'
 import { CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon } from '@heroicons/vue/20/solid'
 // First run for an app: welcome, Tess reads the repo, you check her plan, sign her in, choose when she tests, first test.
-const { state, api, addApp, addSample, setupAction, startTest, show, selectApp, leaveDraft } = useTester()
+const { state, api, addApp, addSample, setupAction, startTest, show, selectApp, leaveDraft, tauri } = useTester()
 const s = computed(() => state.setup)
 const app = computed(() => state.apps.find((a) => a.id === state.appId))
 const STEPS = ['Welcome', 'Read the app', 'Check the plan', 'Sign in', 'First test']
@@ -56,6 +56,9 @@ const targets = computed(() => targetsFor(s.value?.remotes).slice(0, 3))
 const starting = ref(false)
 async function begin() {
   starting.value = true
+  // Automatic testing reports by notification: ask for permission now, while the person is here, not when a test ends.
+  const n = tauri()?.notification
+  if (trigger.value !== 'manual' && n && !(await n.isPermissionGranted())) await n.requestPermission().catch(() => {})
   const ok = (await setupAction('trigger', { mode: trigger.value })) && (await setupAction('onboarded'))
   if (ok) await startTest(targets.value[target.value]!)
   starting.value = false
@@ -180,9 +183,9 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
         <TriggerPicker v-model="trigger" class="ms-12" />
         <TessSays>Let's do a first one now, so you see how it goes. What should I look at?</TessSays>
         <div class="ms-12 flex flex-col gap-3">
-          <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="What to test">
+          <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="What to test" @keydown.left.right.prevent="target = (target + ($event.key === 'ArrowRight' ? 1 : targets.length - 1)) % targets.length; nextTick(() => ($event.currentTarget as HTMLElement | null)?.querySelectorAll<HTMLElement>('[role=radio]')[target]?.focus())">
             <button
-              v-for="(t, i) in targets" :key="t.label" role="radio" :aria-checked="target === i"
+              v-for="(t, i) in targets" :key="t.label" role="radio" :aria-checked="target === i" :tabindex="target === i ? 0 : -1"
               :class="['rounded-full px-3 py-1 text-[12px]', target === i ? 'bg-[var(--accent)] text-[var(--on-accent)] font-medium' : 'bg-[var(--sand)] hover:bg-[var(--line)]']"
               @click="target = i"
             >
