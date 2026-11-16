@@ -13,6 +13,7 @@
   --accent: #1c1c1e; --accent-soft: #ececec; --on-accent: #fff;
   --bubble: #1c1c1e; --bubble-fg: #f2f2f2; --bubble-muted: #a1a1a6;
   --ok: #2b7a46; --warn: #8a6100; --bad: #c22d37; --bad-soft: #fbecec;
+  --sidebar: #f0f0f0; --select: #e0e0e0;
   --log: #1c1c1e; --log-fg: #e5e5e7; --log-say: #ffffff;
   --orb1: #e4f0d8; --orb2: #7fa785; --orb3: #3f6b4b;
 }

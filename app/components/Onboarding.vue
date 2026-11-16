@@ -59,7 +59,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
 </script>
 
 <template>
-  <section ref="top" class="flex-1 min-h-0 overflow-y-auto">
+  <section ref="top" class="flex-1 min-w-0 min-h-0 overflow-y-auto">
     <nav class="sticky top-0 z-10 bg-[var(--page)]/95 backdrop-blur border-b border-[var(--line)] px-6 h-12 flex items-center gap-2" aria-label="Setup steps">
       <ol class="flex items-center gap-1.5 mx-auto min-w-0 overflow-x-auto">
         <li v-for="(name, i) in STEPS" :key="name" class="flex items-center gap-1.5 shrink-0">

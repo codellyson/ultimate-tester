@@ -152,7 +152,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 </script>
 
 <template>
-  <section class="flex-1 min-h-0 flex flex-col">
+  <section class="flex-1 min-w-0 min-h-0 flex flex-col">
     <div class="shrink-0 px-6 py-4 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-[var(--line)]">
       <h1 class="display text-[26px] leading-tight font-medium text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
       <p class="text-[var(--muted)] flex flex-wrap gap-x-1.5" :title="v?.usage">

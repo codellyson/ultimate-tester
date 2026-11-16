@@ -18,6 +18,8 @@ const appHint = (a: (typeof state.apps)[number]) => {
   return s ? { text: `last test ${s.word}`, cls: s.cls } : null
 }
 const disabledNew = computed(() => !state.setup?.profileReady || state.setup?.running)
+const sidebarShown = ref(true)
+onMounted(() => { const q = matchMedia('(min-width: 1080px)'); const set = () => { sidebarShown.value = state.sidebar && q.matches }; set(); q.addEventListener('change', set); watch(() => state.sidebar, set) })
 const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 'onboard' ? 'Getting started' : null))
 </script>
 
@@ -34,7 +36,8 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
       <ChevronDownIcon v-if="app" :class="['size-4 text-[var(--muted)] transition-[rotate] duration-150', state.menu === 'app' && 'rotate-180']" aria-hidden="true" />
     </button>
 
-    <template v-if="app && (where || state.runs.length)">
+    <!-- With the sidebar open, the sidebar is the test picker; the crumb is for when it is hidden. -->
+    <template v-if="app && (where || (state.runs.length && !sidebarShown))">
       <span class="text-[var(--line)] text-[18px] font-light select-none" aria-hidden="true">/</span>
       <span v-if="where" class="px-1.5 text-[var(--muted)]">{{ where }}</span>
       <button

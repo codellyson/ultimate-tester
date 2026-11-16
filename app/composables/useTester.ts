@@ -2,7 +2,7 @@
 import type { Target } from '~/utils/format'
 
 export type App = { id: string, name: string, root: string, profileReady: boolean, signedIn: boolean, running: boolean, last: RunInfo | null }
-export type RunInfo = { id: string, status: string, summary: string, title: string }
+export type RunInfo = { id: string, status: string, summary: string, title: string, kind?: string | null, target?: string | null, note?: string }
 export type PlanItem = { name: string, why?: string, source?: string, status: string, note?: string, persona?: string }
 export type Flow = { name: string, status: string, steps?: string[], expected?: string, actual?: string, evidence?: string[], persona?: string }
 export type Verdict = { status: string, summary: string, flows: Flow[], durationMs?: number, usage?: string }
@@ -49,6 +49,8 @@ type Tauri = {
   dialog?: { open: (o: object) => Promise<string | null> }
   event?: { listen: (name: string, cb: (e: { payload: string }) => void) => Promise<unknown> }
   notification?: { isPermissionGranted: () => Promise<boolean>, requestPermission: () => Promise<string>, sendNotification: (o: { title: string, body?: string }) => void }
+  menu?: { Menu: { new: (o: { items: { text: string, action?: () => void, enabled?: boolean }[] }) => Promise<{ popup: () => Promise<void> }> }, PredefinedMenuItem: unknown }
+  opener?: { revealItemInDir: (path: string) => Promise<void> }
   window?: { getCurrentWindow: () => { setBadgeLabel: (l?: string) => Promise<void>, listen: (n: string, cb: () => void) => Promise<unknown> } }
   webviewWindow?: { WebviewWindow: { getByLabel: (l: string) => Promise<{ show: () => Promise<void>, setFocus: () => Promise<void> } | null> } & (new (label: string, o: object) => unknown) }
 }
@@ -146,11 +148,10 @@ async function startTest(t: Target) {
 }
 
 // Run the open test again, exactly as it was asked for (same commit, range or uncommitted changes, same note).
-async function rerun() {
-  const c = state.detail?.change
-  if (state.view !== 'run' || !c) { state.flash = 'Open a test first, then run it again.'; return }
-  state.note = c.note ?? ''
-  await startTest({ kind: c.kind ?? 'changes', target: c.target ?? undefined })
+async function rerun(r: { kind?: string | null, target?: string | null, note?: string } | null = state.view === 'run' ? state.detail?.change ?? null : null) {
+  if (!r) { state.flash = 'Open a test first, then run it again.'; return }
+  state.note = r.note ?? ''
+  await startTest({ kind: r.kind ?? 'changes', target: r.target ?? undefined })
 }
 
 async function stopTest() {
@@ -230,5 +231,5 @@ async function boot() {
 }
 
 export function useTester() {
-  return { state, api, refresh, loadApps, selectApp, show, openRun, startTest, rerun, stopTest, openSettings, addApp, addSample, setupAction, boot }
+  return { state, tauri, api, refresh, loadApps, selectApp, show, openRun, startTest, rerun, stopTest, openSettings, addApp, addSample, setupAction, boot }
 }

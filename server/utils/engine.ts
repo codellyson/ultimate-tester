@@ -22,7 +22,7 @@ export function runInfo(root: string, id: string) {
   const log = join(dir, 'live.log')
   const quiet = Date.now() - statSync(existsSync(log) ? log : dir).mtimeMs > 10 * 60_000
   const stopped = existsSync(join(dir, 'stopped'))
-  return { id, status: v?.status ?? (stopped || quiet ? 'stopped' : 'running'), summary: v?.summary ?? '', title: runTitle(c) }
+  return { id, status: v?.status ?? (stopped || quiet ? 'stopped' : 'running'), summary: v?.summary ?? '', title: runTitle(c), kind: c?.kind ?? null, target: c?.target ?? null, note: c?.note ?? '' }
 }
 
 // A run is named by its commit message; uncommitted changes and message-less runs by what they touched.
