@@ -44,6 +44,8 @@
 @media (prefers-contrast: more) and (prefers-color-scheme: dark) { :root { --line: #8e8e93; --muted: #d1d1d6; } }
 
 html, body, #__nuxt { height: 100%; }
+/* The window never scrolls or bounces as a whole, as in a Mac app; only the panes inside it scroll. */
+html, body { overflow: hidden; overscroll-behavior: none; }
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased; background: var(--page); color: var(--ink); font-size: 13px;
