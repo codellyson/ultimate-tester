@@ -4,9 +4,19 @@ import { ArrowPathIcon, ArrowRightIcon, CheckIcon, XMarkIcon, ChevronDownIcon } 
 import type { PlanItem, Persona } from '~/composables/useTester'
 const { state, openSettings, rerun, stopTest, tauri } = useTester()
 const r = computed(() => state.detail!)
-const plan = computed(() => state.plan)
 const v = computed(() => r.value.verdict)
 const flows = computed(() => v.value?.flows ?? [])
+// While Tess works, her own checklist (plan.json) is the live view. Once she's done, every status comes from the
+// verdict, which the engine has checked for evidence: a check she never reported counts as not checked, never as passed.
+// A stopped test's unfinished checks read "not checked".
+const plan = computed<PlanItem[]>(() => {
+  if (r.value.status === 'stopped') return state.plan.map((p) => (p.status === 'pending' || p.status === 'running' ? { ...p, status: 'notrun' } : p))
+  if (!v.value) return state.plan
+  const reported = new Map(flows.value.map((f) => [f.name, f]))
+  const fromPlan = state.plan.map((p) => ({ ...p, status: reported.get(p.name)?.status ?? 'unverified', persona: p.persona ?? reported.get(p.name)?.persona }))
+  const extra = flows.value.filter((f) => !state.plan.some((p) => p.name === f.name)).map((f) => ({ name: f.name, status: f.status, persona: f.persona }))
+  return [...fromPlan, ...extra]
+})
 const live = computed(() => r.value.status === 'running')
 const finished = computed(() => !live.value)
 const count = (st: string) => plan.value.filter((p) => p.status === st).length
@@ -35,22 +45,31 @@ const verdict = computed(() => {
   if (v.value?.status === 'pass') {
     const note = /\bnot checked\b|couldn't check|didn't check/i.test(v.value.summary ?? '')
     // Something left unchecked is never a plain green yes.
-    return { lead: note ? 'Safe to push what I checked. ' : 'Safe to push. ', em: `All ${pass.value} checks passed${note ? ', with one thing Tess left unchecked' : ''}.`, cls: note ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }
+    return { lead: note ? 'Everything I tested passed. ' : 'Safe to push. ', em: `All ${pass.value} checks passed${note ? ', with one thing Tess left unchecked' : ''}.`, cls: note ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }
   }
   if (v.value?.status === 'fail') return { lead: "Don't push yet: ", em: `${n(fail.value, 'thing')} broke.`, cls: 'text-[var(--bad)]' }
   // Tess never got evidence from the app and no missing sign-in explains it: say so, never "safe".
   if (v.value && !fail.value && unk.value && !blockers.value.length && !r.value.shots.length) {
     return { lead: "Couldn't test this in the app. ", em: `${n(unk.value, 'check')} didn't run.`, cls: 'text-[var(--warn)]' }
   }
-  if (v.value && pass.value && !fail.value) {
-    const need = blockers.value.length
-      ? `still ${unk.value === 1 ? 'needs' : 'need'} ${blockers.value.map((b) => `a ${shortLabel(b.label).replace(/^(a|an) /i, '')}`).join(' and ')}`
-      : "couldn't run"
+  // "Safe to push what I could reach" only when every unrun check is waiting on a sign-in you can add;
+  // any other gap is an honest "can't say yet" (prompt.md: never call a run safe if a flow wasn't checked).
+  const allBlockedBySignIn = plan.value.filter((p) => p.status === 'unverified').every((p) => !!blockedBy(p))
+  if (v.value && pass.value && !fail.value && allBlockedBySignIn) {
+    const need = `still ${unk.value === 1 ? 'needs' : 'need'} ${blockers.value.map((b) => `a ${shortLabel(b.label).replace(/^(a|an) /i, '')}`).join(' and ')}`
     return { lead: 'Safe to push what I could reach. ', em: `${n(unk.value, 'check')} ${need}.`, cls: 'text-[var(--warn)]' }
   }
   if (v.value) return { lead: "Can't say yet: ", em: `${unk.value ? n(unk.value, 'check') : 'some checks'} couldn't run.`, cls: 'text-[var(--warn)]' }
   if (fail.value) return { lead: 'Not safe yet: ', em: `${n(fail.value, 'thing')} broke.`, cls: 'text-[var(--bad)]' }
   return { lead: pass.value ? 'Looking good so far.' : 'Tess is getting started.', em: '', cls: '' }
+})
+const tested = computed(() => {
+  const c = r.value.change
+  if (!c) return ''
+  const first = c.message.split('\n')[0] ?? ''
+  const what = c.kind === 'changes' || first.startsWith('(not committed') ? 'Uncommitted changes' : first
+  const files = c.files?.length ? `${c.files.length} file${plural(c.files.length)} changed` : ''
+  return [what, files, when(r.value.id)].filter(Boolean).join(' · ')
 })
 const now = ref(Date.now())
 // Under the verdict: counts only when something isn't a pass; the test's name and time live in the title bar.
@@ -201,6 +220,9 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
   <section class="flex-1 min-w-0 min-h-0 flex flex-col">
     <div class="shrink-0 px-6 py-4 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-[var(--line)]">
       <h1 class="display text-[26px] leading-tight font-medium text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
+      <button v-if="r.status === 'stopped' && r.change" class="btn self-center" title="Run this test again (⌘R)" :disabled="!!state.setup?.running" @click="rerun()">Run again</button>
+      <!-- What this test was of, so you never have to recall it from the sidebar. -->
+      <p v-if="tested" class="basis-full -mt-1 text-[12px] text-[var(--muted)] selectable truncate" :title="tested">{{ tested }}</p>
       <p class="text-[var(--muted)] flex flex-wrap gap-x-1.5" :title="v?.usage">
         <template v-for="(m, i) in meta" :key="m.text"><span v-if="i" aria-hidden="true">·</span><span :class="m.cls">{{ m.text }}</span></template>
       </p>
@@ -270,7 +292,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           <div v-for="g in groups" :key="g.gk" class="flex flex-col gap-0.5">
             <div class="pt-3 pb-1 flex items-baseline justify-between gap-2">
               <h3 v-if="g.title" class="font-semibold leading-snug">{{ g.title }}</h3><span v-else />
-              <span class="shrink-0 text-[var(--muted)]">{{ g.ok }} of {{ g.total }} passed</span>
+              <span class="shrink-0 text-[var(--muted)]">{{ r.status === 'stopped' ? 'not checked' : `${g.ok} of ${g.total} passed` }}</span>
             </div>
             <TransitionGroup name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.problems" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
             <template v-for="f in g.fixes" :key="f.who?.key ?? '-'">

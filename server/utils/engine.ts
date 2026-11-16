@@ -19,8 +19,12 @@ export function runInfo(root: string, id: string) {
   const v = json(join(dir, 'verdict.json'))
   const c = json(join(dir, 'change.json'))
   // No verdict and nothing written for 10 minutes: the run was stopped, not still going.
+  // Running while its process is alive; tests from before pid files fall back to "quiet for 10 minutes".
   const log = join(dir, 'live.log')
-  const quiet = Date.now() - statSync(existsSync(log) ? log : dir).mtimeMs > 10 * 60_000
+  const pidFile = join(dir, 'pid')
+  let alive: boolean | null = null
+  if (existsSync(pidFile)) { try { process.kill(Number(readFileSync(pidFile, 'utf8')), 0); alive = true } catch { alive = false } }
+  const quiet = alive === null ? Date.now() - statSync(existsSync(log) ? log : dir).mtimeMs > 10 * 60_000 : !alive
   const stopped = existsSync(join(dir, 'stopped'))
   return { id, status: stopped ? 'stopped' : v?.status ?? (quiet ? 'stopped' : 'running'), summary: v?.summary ?? '', title: runTitle(c), kind: c?.kind ?? null, target: c?.target ?? null, note: c?.note ?? '' }
 }
@@ -31,9 +35,11 @@ function runTitle(c?: { message?: string, files?: string[] }) {
   return (first && first !== '(not committed yet)' ? first : filesTitle(c?.files)) || first
 }
 
+// Named after the first file that is real code: not dotfiles, Ultimate Tester's own files, or docs.
+const NOT_CODE = /(^|\/)\.|\.(md|txt|lock)$|^\.ultimate-tester/i
 function filesTitle(files?: string[]) {
   if (!files?.length) return ''
-  const name = files[0]!.split('/').pop()
+  const name = (files.find((f) => !NOT_CODE.test(f)) ?? files[0]!).split('/').pop()
   return files.length === 1 ? `Changed ${name}` : `Changed ${name} and ${files.length - 1} more`
 }
 
