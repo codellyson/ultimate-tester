@@ -115,7 +115,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_window_state::Builder::default().with_denylist(&["settings"]).build()) // Settings opens at its own size every time
         .manage(Engine(slot))
         .menu(build_menu)
         .on_menu_event(|app, event| {
