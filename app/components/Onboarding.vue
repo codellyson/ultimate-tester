@@ -176,7 +176,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
           </div>
           <input v-model="state.note" type="text" maxlength="1000" class="field" placeholder="Anything to focus on? (optional)" aria-label="Note for this test">
           <div><button class="btn-blue" :disabled="starting || s.running" @click="begin">{{ starting ? 'Starting…' : 'Start my first test' }}</button></div>
-          <p class="text-[12px] text-[var(--muted)]">Takes 3 to 10 minutes. You can watch me work, or carry on and come back.</p>
+          <p class="text-[12px] text-[var(--muted)]">Usually 3 to 10 minutes. You can watch me work, or carry on and come back.</p>
         </div>
       </template>
     </div>

@@ -28,6 +28,10 @@ const blockers = computed(() => [...new Set(plan.value.filter((p) => p.status ==
 // The answer first. Unrun checks never get a plain yes: "safe to push what I could reach", in amber.
 const verdict = computed(() => {
   const n = (x: number, w: string) => `${x} ${w}${plural(x)}`
+  // Stopped comes first: a stopped test is not a result, whatever was checked before it.
+  if (r.value.status === 'stopped') return v.value?.summary === 'You stopped this test.'
+    ? { lead: 'You stopped this test.', em: '', cls: '' }
+    : { lead: 'This test stopped before the end.', em: '', cls: '' }
   if (v.value?.status === 'pass') {
     const note = /\bnot checked\b|couldn't check|didn't check/i.test(v.value.summary ?? '')
     // Something left unchecked is never a plain green yes.
@@ -45,7 +49,6 @@ const verdict = computed(() => {
     return { lead: 'Safe to push what I could reach. ', em: `${n(unk.value, 'check')} ${need}.`, cls: 'text-[var(--warn)]' }
   }
   if (v.value) return { lead: "Can't say yet: ", em: `${unk.value ? n(unk.value, 'check') : 'some checks'} couldn't run.`, cls: 'text-[var(--warn)]' }
-  if (r.value.status === 'stopped') return { lead: 'This test stopped before the end.', em: '', cls: '' }
   if (fail.value) return { lead: 'Not safe yet: ', em: `${n(fail.value, 'thing')} broke.`, cls: 'text-[var(--bad)]' }
   return { lead: pass.value ? 'Looking good so far.' : 'Tess is getting started.', em: '', cls: '' }
 })
@@ -98,7 +101,7 @@ const screen = computed(() => {
   }
   // A browser that never left about:blank is not evidence of anything.
   if (r.value.live && r.value.live.url !== 'about:blank') return { src: `/api/apps/${state.appId}/shots/${r.value.id}/live.jpg?t=${liveTick.value}`, alt: 'Live view of the app being tested', label: `${live.value ? 'Live' : 'Last screen'} · ${r.value.live.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
-  return { src: null, empty: live.value ? 'Tess is reading the change. The app shows up here once she opens it.' : (r.value.live ? "Tess never reached the app, so there's no screen to show. Her note in the checklist says why." : 'No screen was recorded for this test.'), label: live.value ? '' : 'No screen' }
+  return { src: null, empty: live.value ? 'Tess is reading the change. The app shows up here once she opens it.' : (r.value.status === 'stopped' ? 'The test was stopped before Tess took a screenshot.' : r.value.live ? "Tess never reached the app, so there's no screen to show. Her note in the checklist says why." : 'No screen was recorded for this test.'), label: live.value ? '' : 'No screen' }
 })
 // Evidence up close: click or Space for full size; drag it out; right-click to copy or find the file.
 const zoomed = ref(false)
@@ -136,8 +139,8 @@ const says = computed(() => r.value.steps.filter((s) => s.startsWith('say: ')).m
 // The headline is the verdict; the bubble is Tess explaining it. A verdict phrase opening her summary is
 // dropped, so the two can never disagree ("4 checks still need a look" above, "Safe to push." below).
 const VERDICT_LEAD = /^\s*(safe to push|don['’]t push yet|not safe yet|can['’]t say yet)[^.!?:]*[.!?:]\s*/i
-const bubble = computed(() => (v.value ? v.value.summary.replace(VERDICT_LEAD, '').replace(/^\p{Ll}/u, (c) => c.toUpperCase()) || v.value.summary : says.value.at(-1) ?? 'Reading the change…'))
-const bubbleLabel = computed(() => (v.value ? 'Tess · what I found' : fail.value ? 'Tess · caught one' : live.value ? 'Tess · testing' : 'Tess'))
+const bubble = computed(() => (r.value.status === 'stopped' ? says.value.at(-1) ?? 'I stopped before saying anything.' : v.value ? v.value.summary.replace(VERDICT_LEAD, '').replace(/^\p{Ll}/u, (c) => c.toUpperCase()) || v.value.summary : says.value.at(-1) ?? 'Reading the change…'))
+const bubbleLabel = computed(() => (r.value.status === 'stopped' ? 'Tess · last thing I said' : v.value ? 'Tess · what I found' : fail.value ? 'Tess · caught one' : live.value ? 'Tess · testing' : 'Tess'))
 const bubbleEdge = computed(() => (v.value && v.value.status !== 'pass' ? `inset 3px 0 0 ${v.value.status === 'fail' ? 'var(--bad)' : 'var(--warn)'}` : ''))
 
 // Checks, by who Tess tested as: problems first with their one fix, passes folded.

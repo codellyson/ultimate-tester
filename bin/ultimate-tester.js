@@ -15,7 +15,8 @@ const SELF = fileURLToPath(import.meta.url);
 const PROFILE = '.ultimate-tester.md';
 const STATE = '.ultimate-tester';
 const MAX_LOOPS = 3;
-let TIMEOUT_MS = Number(process.env.ULTIMATE_TESTER_TIMEOUT_MS ?? 5 * 60_000);
+// 12 minutes for a change or a commit (the window promises 3 to 10), 25 for a release (set in run()).
+let TIMEOUT_MS = Number(process.env.ULTIMATE_TESTER_TIMEOUT_MS ?? 12 * 60_000);
 const PLAYWRIGHT_MCP = '@playwright/mcp@0.0.84';
 const MODEL = process.env.ULTIMATE_TESTER_MODEL ?? 'opus';
 
@@ -121,7 +122,11 @@ async function runTester(prompt, runDir) {
         if (!j.structured_output) throw new Error(j.result || 'no structured output');
         resolve({ verdict: j.structured_output, costUsd: j.total_cost_usd ?? 0 });
       } catch (e) {
-        const why = existsSync(join(runDir, 'stopped')) ? 'You stopped this test.' : code === null ? `timed out after ${TIMEOUT_MS / 1000}s` : `tester failed: ${String(e.message || err).slice(0, 300)}`;
+        const why = existsSync(join(runDir, 'stopped'))
+          ? 'You stopped this test.'
+          : code === null
+            ? `I ran out of time after ${Math.round(TIMEOUT_MS / 60_000)} minutes, so I couldn't finish. Try a smaller change, or give me longer with ULTIMATE_TESTER_TIMEOUT_MS.`
+            : `Something went wrong on my side before I could finish (${String(e.message || err).trim().slice(0, 200)}). Run the test again; if it keeps happening, check that Claude Code is signed in.`;
         resolve({ verdict: { status: 'unverified', summary: why, flows: [] }, costUsd: 0 });
       }
     });
