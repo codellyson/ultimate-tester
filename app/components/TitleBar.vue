@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDownIcon, MagnifyingGlassIcon, PlusIcon } from '@heroicons/vue/16/solid'
+import { ChevronDownIcon, PlusIcon } from '@heroicons/vue/16/solid'
 // One bar: which app / which test (both are menus), connection trouble, New test and ⌘K.
 const { state, selectApp, openRun, startTest, addApp, openSettings } = useTester()
 const app = computed(() => state.apps.find((a) => a.id === state.appId))
@@ -40,7 +40,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
 </script>
 
 <template>
-  <header class="vibrant h-11 shrink-0 flex items-center gap-1.5 ps-[88px] pe-3 border-b border-[var(--line)] bg-[var(--sand)] relative" data-tauri-drag-region>
+  <header class="h-11 shrink-0 flex items-center gap-1.5 ps-[88px] pe-3 border-b border-[var(--line)] bg-[var(--sand)] relative" data-tauri-drag-region>
     <button
       ref="appBtn" class="crumb font-medium"
       aria-haspopup="true" :aria-expanded="state.menu === 'app'"
@@ -73,13 +73,13 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
       <span class="size-1.5 rounded-full bg-[var(--warn)] pulse" aria-hidden="true" />Reconnecting…
     </span></Transition>
     <button
-      v-if="app && state.view !== 'onboard'" ref="newBtn" :class="['tool shrink-0', !state.offline && 'ms-auto']"
+      v-if="app && state.view !== 'onboard'" ref="newBtn" :class="['btn shrink-0 h-7 py-0', !state.offline && 'ms-auto']"
       aria-haspopup="true" :aria-expanded="state.menu === 'new'" @click.stop="toggle('new')"
-    ><PlusIcon class="size-4" aria-hidden="true" />New Test</button>
+    ><PlusIcon class="size-4 -ms-1" aria-hidden="true" />New test</button>
     <button
-      :class="['tool shrink-0 text-[var(--muted)]', (!app || state.view === 'onboard') && !state.offline && 'ms-auto']"
-      aria-label="Commands (⌘K)" title="Commands (⌘K)" @click="state.menu = null; state.cmdk = true"
-    ><MagnifyingGlassIcon class="size-4" aria-hidden="true" /></button>
+      :class="['shrink-0 h-7 rounded-md bg-[var(--surface)] ring-1 ring-[var(--line)] px-2.5 text-[var(--muted)] flex items-center gap-2.5 hover:bg-[var(--surface)]', (!app || state.view === 'onboard') && !state.offline && 'ms-auto']"
+      aria-label="Commands (⌘K)" @click="state.menu = null; state.cmdk = true"
+    ><kbd class="text-[11px] font-sans">⌘K</kbd></button>
 
     <Transition name="pop"><div v-if="state.menu === 'app'" data-menu="app" role="menu" aria-label="Apps" class="origin-top-left absolute start-[88px] top-10 z-30 w-72 rounded-xl bg-[var(--surface)] surface-float p-1.5" @click.stop @keydown="menuKey">
       <button

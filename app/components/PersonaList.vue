@@ -11,7 +11,7 @@ async function finish() { if (await setupAction('signin/finish')) loadApps() }
 
 <template>
   <div class="flex flex-col gap-3">
-    <div class="max-w-2xl rounded-[10px] bg-[var(--surface)] surface divide-y divide-[var(--line)]">
+    <div class="max-w-2xl rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)]">
       <div v-for="p in s.personas" :key="p.key" :class="['px-5 py-3.5 flex items-center gap-4 transition-colors duration-200', s.signingIn === p.key && 'bg-[var(--accent-soft)]']">
         <div class="flex-1 min-w-0"><p class="font-medium">{{ p.signIn ? p.label : p.label.replace(/[,;]?\s*\(?(no sign-in|signed[- ]out|not signed in)\)?\.?\s*$/i, '') }}</p><p class="text-[12px] text-[var(--muted)] mono">{{ p.key }}</p></div>
         <div class="flex items-center gap-3 shrink-0">
