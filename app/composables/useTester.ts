@@ -30,6 +30,7 @@ const state = reactive({
   detail: null as RunDetail | null,
   plan: [] as PlanItem[], // last good plan: the tester rewrites plan.json mid-run
   flash: '',
+  draftDirty: false, // a profile edit with unsaved changes is open
   dismissed: '', // an error the person closed: the next poll doesn't bring the same one back
   sel: { id: null as string | null, check: null as string | null, shot: 0 },
   unfolded: new Set<string>(),
@@ -232,7 +233,8 @@ async function boot() {
   })
   if (state.inSettings) {
     // Settings stays loaded while hidden, so it re-reads the profile every time it is shown or focused.
-    t?.event?.listen('settings-app', (e) => { if (e.payload && e.payload !== state.appId) selectApp(e.payload); else refresh() })
+    // Never switch apps under an unsaved edit; the person finishes or cancels it first.
+    t?.event?.listen('settings-app', (e) => { if (e.payload && e.payload !== state.appId && !state.draftDirty) selectApp(e.payload); else refresh() })
     window.addEventListener('focus', () => refresh())
   }
   if (!state.inSettings && t?.core) {

@@ -22,26 +22,52 @@ function replaceSection(head: string, text: string) {
 
 const editing = ref<string | null>(null) // a section head, or '*' for the whole file
 const draft = ref('')
-function edit(head: string) { editing.value = head; draft.value = head === '*' ? props.profile : sections.value[head] ?? '- ' }
-async function save() {
-  const text = editing.value === '*' ? draft.value : replaceSection(editing.value!, draft.value)
-  if (await setupAction('profile', { text, base: state.setup?.profileHash })) editing.value = null
+// What the edit started from, so a change on disk meanwhile (a lesson Tess learned, the other window) is caught.
+const original = ref('')
+const startHash = ref('')
+const current = () => (editing.value === '*' ? props.profile : sections.value[editing.value!] ?? '- ')
+const changedUnderneath = computed(() => !!editing.value && current() !== original.value)
+const dirty = computed(() => !!editing.value && draft.value !== original.value)
+watch(dirty, (d) => { state.draftDirty = d })
+onBeforeUnmount(() => { state.draftDirty = false })
+function edit(head: string) {
+  editing.value = head
+  draft.value = original.value = current()
+  startHash.value = state.setup?.profileHash ?? ''
+  escArmed.value = false
 }
+async function save() {
+  if (changedUnderneath.value) return
+  // A section is merged into the latest file, so only that section had to be unchanged (checked above);
+  // the whole file is checked against the version the edit started from.
+  const whole = editing.value === '*'
+  const text = whole ? draft.value : replaceSection(editing.value!, draft.value)
+  if (await setupAction('profile', { text, base: whole ? startHash.value : state.setup?.profileHash })) editing.value = null
+}
+// Esc on changed text asks first: the second Esc discards.
+const escArmed = ref(false)
+function cancel() {
+  if (dirty.value && !escArmed.value) { escArmed.value = true; return }
+  editing.value = null; escArmed.value = false
+}
+watch(draft, () => { escArmed.value = false })
 </script>
 
 <template>
   <div class="max-w-2xl rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)]">
     <template v-if="editing === '*'">
-      <div class="p-4"><textarea v-model="draft" class="field mono text-[12px] min-h-96" aria-label="Profile Markdown" @keydown.meta.s.prevent="save" @keydown.esc.stop="editing = null" /></div>
-      <div class="flex gap-2 p-4"><button class="btn-blue" title="Save (⌘S)" @click="save">Save</button><button class="btn" title="Cancel (Esc)" @click="editing = null">Cancel</button></div>
+      <div class="p-4"><textarea v-model="draft" class="field mono text-[12px] min-h-96" aria-label="Profile Markdown" @keydown.meta.s.prevent="save" @keydown.esc.stop="cancel" /></div>
+      <EditNotice :changed="changedUnderneath" :esc="escArmed" class="px-4" />
+      <div class="flex gap-2 p-4"><button class="btn-blue" title="Save (⌘S)" :disabled="changedUnderneath" @click="save">Save</button><button class="btn" title="Cancel (Esc)" @click="editing = null">Cancel</button></div>
     </template>
     <template v-else>
       <div v-for="row in rows" :key="row.head" class="px-5 py-4 flex gap-4">
         <span class="w-32 shrink-0 text-[var(--muted)]">{{ row.label }}</span>
         <div class="selectable flex-1 min-w-0 flex flex-col gap-1">
           <template v-if="editing === row.head">
-            <textarea v-model="draft" class="field mono text-[12px] min-h-28" :aria-label="`Edit ${row.label}`" @keydown.meta.s.prevent="save" @keydown.esc.stop="editing = null" />
-            <div class="flex gap-2"><button class="btn-blue" title="Save (⌘S)" @click="save">Save</button><button class="btn" title="Cancel (Esc)" @click="editing = null">Cancel</button></div>
+            <textarea v-model="draft" class="field mono text-[12px] min-h-28" :aria-label="`Edit ${row.label}`" @keydown.meta.s.prevent="save" @keydown.esc.stop="cancel" />
+            <EditNotice :changed="changedUnderneath" :esc="escArmed" />
+            <div class="flex gap-2"><button class="btn-blue" title="Save (⌘S)" :disabled="changedUnderneath" @click="save">Save</button><button class="btn" title="Cancel (Esc)" @click="editing = null">Cancel</button></div>
           </template>
           <p v-else-if="!row.lines.length || /^\(.*\)$/.test(row.lines.flat().join('').trim())" class="text-[var(--muted)]">{{ EMPTY[row.head] ?? 'Nothing here yet.' }}</p>
           <p v-for="(bits, i) in row.lines" v-else :key="i" :class="row.head === 'Must never break' && 'flex gap-2'">

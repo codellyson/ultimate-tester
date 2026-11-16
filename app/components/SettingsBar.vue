@@ -1,7 +1,11 @@
 <script setup lang="ts">
 // The Settings window's title bar: which app's settings these are.
 const { state, selectApp } = useTester()
-function pick(e: Event) { selectApp((e.target as HTMLSelectElement).value) }
+function pick(e: Event) {
+  const el = e.target as HTMLSelectElement
+  if (state.draftDirty) { el.value = state.appId ?? ''; state.flash = 'Save or cancel your edit before switching apps.'; return }
+  selectApp(el.value)
+}
 </script>
 
 <template>
