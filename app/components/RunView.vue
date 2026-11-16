@@ -45,7 +45,7 @@ const verdict = computed(() => {
   if (v.value?.status === 'pass') {
     const note = /\bnot checked\b|couldn't check|didn't check/i.test(v.value.summary ?? '')
     // Something left unchecked is never a plain green yes.
-    return { lead: note ? 'Everything I tested passed. ' : 'Safe to push. ', em: `All ${pass.value} checks passed${note ? ', with one thing Tess left unchecked' : ''}.`, cls: note ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }
+    return { lead: note ? 'Everything I tested passed. ' : 'Safe to push. ', em: `All ${pass.value} checks passed${note ? ', but Tess mentions something she didn\'t check' : ''}.`, cls: note ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }
   }
   if (v.value?.status === 'fail') return { lead: "Don't push yet: ", em: `${n(fail.value, 'thing')} broke.`, cls: 'text-[var(--bad)]' }
   // Tess never got evidence from the app and no missing sign-in explains it: say so, never "safe".
@@ -71,6 +71,28 @@ const tested = computed(() => {
   const files = c.files?.length ? `${c.files.length} file${plural(c.files.length)} changed` : ''
   return [what, files, when(r.value.id)].filter(Boolean).join(' · ')
 })
+// A plain-text report a coding agent can act on: verdict, what was tested, and each problem with its evidence.
+const copied = ref(false)
+async function copyReport() {
+  if (!v.value) { state.flash = 'Open a finished test to copy its report.'; return }
+  const app = state.apps.find((a) => a.id === state.appId)
+  const dir = app ? `${app.root}/.ultimate-tester/runs/${r.value.id}` : ''
+  const lines = [`Ultimate Tester: ${verdict.value.lead}${verdict.value.em}`.trim(), tested.value, '', v.value.summary]
+  for (const f of flows.value.filter((x) => x.status !== 'pass')) {
+    lines.push('', `${statusOf(f.status).word.toUpperCase()}: ${f.name}`)
+    if (f.steps?.length) lines.push(...f.steps.map((s, i) => `  ${i + 1}. ${s}`))
+    if (f.expected) lines.push(`  Expected: ${f.expected}`)
+    if (f.actual) lines.push(`  Actual: ${f.actual}`)
+    for (const e of f.evidence ?? []) lines.push(`  Evidence: ${e.startsWith('/') || !dir ? e : `${dir}/${e.split('/').at(-1)}`}`)
+  }
+  try {
+    await navigator.clipboard.writeText(lines.join('\n').trim() + '\n')
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 1500)
+  } catch { state.flash = "Couldn't copy the report." }
+}
+watch(() => state.copyTick, () => copyReport())
+
 const now = ref(Date.now())
 // Under the verdict: counts only when something isn't a pass; the test's name and time live in the title bar.
 const meta = computed(() => {
@@ -85,6 +107,7 @@ const meta = computed(() => {
     if (unk.value) out.push({ text: `${unk.value} can't check`, cls: 'text-[var(--warn)] font-medium' })
   }
   if (v.value) out.push({ text: `${Math.round((v.value.durationMs ?? 0) / 60000) || '<1'} min`, cls: '' })
+  if (finished.value && !r.value.shots.length) out.push({ text: 'no screenshots', cls: '' })
   return out
 })
 const bar = computed(() => {
@@ -123,7 +146,7 @@ const screen = computed(() => {
   return { src: null, empty: live.value ? 'Tess is reading the change. The app shows up here once she opens it.' : (r.value.status === 'stopped' ? 'The test was stopped before Tess took a screenshot.' : r.value.live ? "Tess never reached the app, so there's no screen to show. Her note in the checklist says why." : 'No screen was recorded for this test.'), label: live.value ? '' : 'No screen' }
 })
 // A finished test with nothing to show: the panel shrinks so Tess's words and the checks lead.
-const noEvidence = computed(() => finished.value && !screen.value.src)
+const noEvidence = computed(() => finished.value && !r.value.shots.length && !screen.value.src)
 
 // Evidence up close: click or Space for full size; drag it out; right-click to copy or find the file.
 const zoomed = ref(false)
@@ -163,8 +186,14 @@ const says = computed(() => r.value.steps.filter((s) => s.startsWith('say: ')).m
 // The headline is the verdict; the bubble is Tess explaining it. A verdict phrase opening her summary is
 // dropped, so the two can never disagree ("4 checks still need a look" above, "Safe to push." below).
 const VERDICT_LEAD = /^\s*(safe to push|don['’]t push yet|not safe yet|can['’]t say yet)[^.!?:]*[.!?:]\s*/i
-const bubble = computed(() => (r.value.status === 'stopped' ? says.value.at(-1) ?? 'I stopped before saying anything.' : v.value ? v.value.summary.replace(VERDICT_LEAD, '').replace(/^\p{Ll}/u, (c) => c.toUpperCase()) || v.value.summary : says.value.at(-1) ?? 'Reading the change…'))
-const bubbleLabel = computed(() => (r.value.status === 'stopped' ? 'Tess · last thing I said' : v.value ? 'Tess · what I found' : fail.value ? 'Tess · caught one' : live.value ? 'Tess · testing' : 'Tess'))
+// A stopped test explains how far Tess got, rather than replaying whatever she said last.
+const stoppedNote = computed(() => {
+  const done = plan.value.filter((p) => ['pass', 'fail', 'unverified'].includes(p.status)).length
+  const last = says.value.at(-1)
+  return `You stopped me ${done ? `after ${done} of ${plan.value.length} checks` : 'before I checked anything'}.${last ? ` I was at: “${last}”` : ''}`
+})
+const bubble = computed(() => (r.value.status === 'stopped' ? stoppedNote.value : v.value ? v.value.summary.replace(VERDICT_LEAD, '').replace(/^\p{Ll}/u, (c) => c.toUpperCase()) || v.value.summary : says.value.at(-1) ?? 'Reading the change…'))
+const bubbleLabel = computed(() => (r.value.status === 'stopped' ? 'Tess · stopped' : v.value ? 'Tess · what I found' : fail.value ? 'Tess · caught one' : live.value ? 'Tess · testing' : 'Tess'))
 const bubbleEdge = computed(() => (v.value && v.value.status !== 'pass' && r.value.status !== 'stopped' ? `inset 3px 0 0 ${v.value.status === 'fail' ? 'var(--bad)' : 'var(--warn)'}` : ''))
 
 // Checks, by who Tess tested as: problems first with their one fix, passes folded.
@@ -189,6 +218,8 @@ const pick = (name: string) => { state.sel = { id: r.value.id, check: name, shot
 // ↑ ↓ move between checks and the screen follows; ← → step through a check's screenshots (in reading direction).
 const rail = ref<HTMLElement>()
 function onKey(e: KeyboardEvent) {
+  // ↑↓ belong to the checks only while they're showing; in the Log they scroll the log.
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && (state.rail !== 'checks' || (document.activeElement as HTMLElement)?.closest?.('#panel-log'))) return
   if (zoomed.value && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); zoomed.value = false; return }
   if (state.view !== 'run' || !finished.value || state.cmdk || state.menu || e.metaKey || e.ctrlKey || e.altKey) return
   if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement as HTMLElement)?.tagName ?? '')) return
@@ -225,7 +256,11 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
     <div class="shrink-0 px-6 py-4 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-[var(--line)]">
       <p class="sr-only" role="status">{{ finished && v ? `${verdict.lead}${verdict.em}` : '' }}</p>
       <h1 class="display text-[26px] leading-tight font-medium text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
-      <button v-if="r.status === 'stopped' && r.change" class="btn self-center" title="Run this test again (⌘R)" :disabled="!!state.setup?.running" @click="rerun()">Run again</button>
+      <!-- What to do next: hand a problem to Claude Code, or run it again. -->
+      <div v-if="finished && r.change" class="flex gap-2 self-center">
+        <button v-if="v && v.status !== 'pass' && r.status !== 'stopped'" class="btn-blue" title="Copy the report for Claude Code (⇧⌘C)" @click="copyReport">{{ copied ? 'Copied' : 'Copy for Claude Code' }}</button>
+        <button class="btn" title="Run this test again (⌘R)" :disabled="!!state.setup?.running" @click="rerun()">Run again</button>
+      </div>
       <p class="text-[var(--muted)] flex flex-wrap gap-x-1.5" :title="v?.usage">
         <template v-for="(m, i) in meta" :key="m.text"><span v-if="i" aria-hidden="true">·</span><span :class="m.cls">{{ m.text }}</span></template>
       </p>
@@ -244,7 +279,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 
     <div class="flex-1 min-h-0 flex flex-col overflow-y-auto min-[880px]:flex-row min-[880px]:overflow-visible">
       <main class="flex-1 min-w-0 p-4 flex flex-col gap-3" aria-label="What Tess saw">
-        <div :class="['relative rounded-2xl overflow-hidden surface flex flex-col', noEvidence ? 'shrink-0 h-28 bg-[var(--surface)]' : 'flex-1 min-h-[50vh] min-[880px]:min-h-0 bg-[var(--canvas)] text-zinc-900']">
+        <div v-if="!noEvidence" :class="['relative rounded-2xl overflow-hidden surface flex flex-col', noEvidence ? 'shrink-0 h-28 bg-[var(--surface)]' : 'flex-1 min-h-[50vh] min-[880px]:min-h-0 bg-[var(--canvas)] text-zinc-900']">
           <div class="h-8 shrink-0 bg-[var(--sand)] border-b border-[var(--line)] flex items-center px-3 text-[12px] text-[var(--muted)] gap-2 min-w-0">
             <span v-if="live" class="size-1.5 rounded-full bg-rose-500 pulse shrink-0" />
             <span class="truncate">{{ screen.label }}</span>

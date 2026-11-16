@@ -2,13 +2,13 @@
 import { CheckIcon, PlusIcon } from '@heroicons/vue/16/solid'
 import { CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon } from '@heroicons/vue/20/solid'
 // First run for an app: welcome, Tess reads the repo, you check her plan, sign her in, choose when she tests, first test.
-const { state, api, addApp, addSample, setupAction, startTest, show, selectApp } = useTester()
+const { state, api, addApp, addSample, setupAction, startTest, show, selectApp, leaveDraft } = useTester()
 const s = computed(() => state.setup)
 const app = computed(() => state.apps.find((a) => a.id === state.appId))
 const STEPS = ['Welcome', 'Read the app', 'Check the plan', 'Sign in', 'First test']
 const step = ref(!state.appId ? 0 : !s.value?.profileReady ? 1 : 2)
 const top = ref<HTMLElement>()
-function go(n: number) { step.value = n; nextTick(() => top.value?.scrollTo({ top: 0 })) }
+async function go(n: number) { if (!(await leaveDraft())) return; step.value = n; nextTick(() => top.value?.scrollTo({ top: 0 })) }
 
 // 0 · Is this Mac ready?
 type Preflight = { claude: { ok: boolean, plan: string | null, apiKey: boolean }, chrome: boolean, node: string }

@@ -42,12 +42,12 @@ function key(e: KeyboardEvent) {
 </script>
 
 <template>
-  <Transition name="palette"><div v-if="state.cmdk" class="fixed inset-0 z-40 bg-black/20 grid place-items-start justify-center pt-24" ref="box" role="dialog" aria-modal="true" @keydown="onTab" aria-label="Commands" @click.self="state.cmdk = false">
+  <Transition name="palette"><div v-if="state.cmdk" class="fixed inset-0 z-40 bg-black/20 grid place-items-start justify-center pt-24" ref="box" role="dialog" aria-modal="true" @keydown="onTab($event); key($event)" aria-label="Commands" @click.self="state.cmdk = false">
     <div class="origin-top w-[520px] max-w-[92vw] rounded-xl bg-[var(--surface)] surface-float overflow-hidden">
       <input
         ref="input" v-model="q" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list"
         :aria-activedescendant="sel >= 0 ? `cmd-${sel}` : undefined" aria-label="Command" placeholder="What should Tess do?"
-        class="no-ring w-full px-4 py-3 text-[15px] bg-transparent outline-none border-b border-[var(--line)]" @keydown="key"
+        class="no-ring w-full px-4 py-3 text-[15px] bg-transparent outline-none border-b border-[var(--line)]"
       >
       <div id="cmdk-list" class="max-h-80 overflow-y-auto p-1.5" role="listbox" aria-label="Commands">
         <template v-for="g in groups" :key="g.group">

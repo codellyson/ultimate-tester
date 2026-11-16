@@ -5,5 +5,5 @@ defineProps<{ changed: boolean, esc: boolean }>()
 
 <template>
   <p v-if="changed" class="text-[12px] text-[var(--warn)]" role="alert">Tess changed this part while you were editing (she may have learned something). Copy your text, press Cancel to see the latest, then edit again.</p>
-  <p v-else-if="esc" class="text-[12px] text-[var(--muted)]" role="status">Press Esc again to discard your changes.</p>
+  <p v-else-if="esc" class="text-[12px] text-[var(--muted)]" role="status">Press Esc or Cancel again to discard your changes.</p>
 </template>

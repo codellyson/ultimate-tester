@@ -30,7 +30,8 @@ const state = reactive({
   detail: null as RunDetail | null,
   plan: [] as PlanItem[], // last good plan: the tester rewrites plan.json mid-run
   flash: '',
-  draftDirty: false, // a profile edit with unsaved changes is open
+  draftDirty: false,
+  copyTick: 0, // Test ▸ Copy Report asks the open test to copy itself // a profile edit with unsaved changes is open
   dismissed: '', // an error the person closed: the next poll doesn't bring the same one back
   sel: { id: null as string | null, check: null as string | null, shot: 0 },
   unfolded: new Set<string>(),
@@ -50,7 +51,7 @@ const state = reactive({
 const OFFLINE = "Can't reach Ultimate Tester's engine. It restarts by itself; try again in a few seconds."
 // The native shell's API (Tauri), present only inside the Mac app.
 type Tauri = {
-  dialog?: { open: (o: object) => Promise<string | null> }
+  dialog?: { open: (o: object) => Promise<string | null>, ask: (msg: string, o: object) => Promise<boolean> }
   event?: { listen: (name: string, cb: (e: { payload: string }) => void) => Promise<unknown> }
   notification?: { isPermissionGranted: () => Promise<boolean>, requestPermission: () => Promise<string>, sendNotification: (o: { title: string, body?: string }) => void }
   menu?: { Menu: { new: (o: { items: { text: string, action?: () => void, enabled?: boolean }[] }) => Promise<{ popup: () => Promise<void> }> }, PredefinedMenuItem: unknown }
@@ -130,21 +131,35 @@ async function refresh() {
 
 // The app you were on comes back next launch (per-viewer convenience; storage may be unavailable).
 const LAST_APP = 'ut.lastApp'
-function selectApp(id: string) {
+// Before anything replaces the screen: an unsaved profile edit is never dropped without asking.
+async function leaveDraft() {
+  if (!state.draftDirty) return true
+  const ask = tauri()?.dialog?.ask
+  const ok = ask
+    ? await ask('You have unsaved changes to how Tess tests this app.', { title: 'Discard your edit?', kind: 'warning', okLabel: 'Discard', cancelLabel: 'Keep Editing' })
+    : confirm('Discard your unsaved changes to how Tess tests this app?')
+  if (ok) state.draftDirty = false
+  return ok
+}
+
+async function selectApp(id: string) {
+  if (!(await leaveDraft())) return
   if (!state.inSettings) try { localStorage.setItem(LAST_APP, id) } catch {}
   Object.assign(state, { appId: id, runId: null, follow: true, setup: null, detail: null, plan: [], view: null })
   history.replaceState(null, '', `?app=${id}`)
   refresh()
 }
 
-function show(v: 'setup' | 'run' | 'onboard') {
+async function show(v: 'setup' | 'run' | 'onboard') {
+  if (v !== state.view && !(await leaveDraft())) return
   state.view = v
   // Only Setup is kept in the URL; onboarding is decided by the app's state, so a reload never lands in it.
   history.replaceState(null, '', `?app=${state.appId}${v === 'setup' ? '&view=setup' : ''}`)
   refresh()
 }
 
-function openRun(id: string, follow = false) {
+async function openRun(id: string, follow = false) {
+  if (!(await leaveDraft())) return
   state.runId = id; state.follow = follow; state.plan = []; state.detail = null
   show('run')
 }
@@ -189,6 +204,7 @@ function onMenu(id: string) {
     'stop': stopTest,
     'toggle-sidebar': () => { state.sidebar = !state.sidebar },
     'show-checks': () => { state.rail = 'checks' },
+    'copy-report': () => { if (state.view === 'run') state.copyTick++; else state.flash = 'Open a finished test to copy its report.' },
     'show-log': () => { state.rail = 'log' },
     'commands': () => { state.menu = null; state.cmdk = true },
     'getting-started': () => { if (state.appId) show('onboard') },
@@ -284,5 +300,5 @@ async function boot() {
 }
 
 export function useTester() {
-  return { state, tauri, api, refresh, loadApps, selectApp, show, openRun, startTest, rerun, stopTest, openSettings, addApp, addSample, setupAction, boot }
+  return { state, tauri, leaveDraft, api, refresh, loadApps, selectApp, show, openRun, startTest, rerun, stopTest, openSettings, addApp, addSample, setupAction, boot }
 }

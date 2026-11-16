@@ -58,7 +58,7 @@ watch(draft, () => { escArmed.value = false })
     <template v-if="editing === '*'">
       <div class="p-4"><textarea v-model="draft" class="field mono text-[12px] min-h-96" aria-label="Profile Markdown" @keydown.meta.s.prevent="save" @keydown.esc.stop="cancel" /></div>
       <EditNotice :changed="changedUnderneath" :esc="escArmed" class="px-4" />
-      <div class="flex gap-2 p-4"><button class="btn-blue" title="Save (⌘S)" :disabled="changedUnderneath" @click="save">Save</button><button class="btn" title="Cancel (Esc)" @click="editing = null">Cancel</button></div>
+      <div class="flex gap-2 p-4"><button class="btn-blue" title="Save (⌘S)" :disabled="changedUnderneath" @click="save">Save</button><button class="btn" title="Cancel (Esc)" @click="cancel">Cancel</button></div>
     </template>
     <template v-else>
       <div v-for="row in rows" :key="row.head" class="px-5 py-4 flex gap-4">
@@ -67,7 +67,7 @@ watch(draft, () => { escArmed.value = false })
           <template v-if="editing === row.head">
             <textarea v-model="draft" class="field mono text-[12px] min-h-28" :aria-label="`Edit ${row.label}`" @keydown.meta.s.prevent="save" @keydown.esc.stop="cancel" />
             <EditNotice :changed="changedUnderneath" :esc="escArmed" />
-            <div class="flex gap-2"><button class="btn-blue" title="Save (⌘S)" :disabled="changedUnderneath" @click="save">Save</button><button class="btn" title="Cancel (Esc)" @click="editing = null">Cancel</button></div>
+            <div class="flex gap-2"><button class="btn-blue" title="Save (⌘S)" :disabled="changedUnderneath" @click="save">Save</button><button class="btn" title="Cancel (Esc)" @click="cancel">Cancel</button></div>
           </template>
           <p v-else-if="!row.lines.length || /^\(.*\)$/.test(row.lines.flat().join('').trim())" class="text-[var(--muted)]">{{ EMPTY[row.head] ?? 'Nothing here yet.' }}</p>
           <p v-for="(bits, i) in row.lines" v-else :key="i" :class="row.head === 'Must never break' && 'flex gap-2'">

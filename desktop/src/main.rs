@@ -99,7 +99,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<(Menu<tauri::Wry>, MenuHa
             &PredefinedMenuItem::paste(app, None)?,
             &PredefinedMenuItem::select_all(app, None)?,
         ])?,
-        &Submenu::with_items(app, "Test", true, &[&h.rerun, &h.stop])?,
+        &Submenu::with_items(app, "Test", true, &[&h.rerun, &h.stop, &sep()?, &item("copy-report", "Copy Report for Claude Code", Some("Shift+CmdOrCtrl+C"))?])?,
         &Submenu::with_items(app, "View", true, &[
             &h.sidebar,
             &sep()?,

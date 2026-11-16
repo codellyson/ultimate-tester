@@ -1,7 +1,8 @@
 // A dialog that blocks the window keeps keyboard focus inside while open and gives it back on close.
 export function useModalFocus(open: () => boolean, box: Ref<HTMLElement | undefined>) {
   let opener: HTMLElement | null = null
-  const focusables = () => [...(box.value?.querySelectorAll<HTMLElement>('button:not(:disabled), input, textarea, select, [tabindex]:not([tabindex="-1"])') ?? [])]
+  // What Tab reaches: anything focusable that isn't taken out of the tab order (list options use ↑↓ instead).
+  const focusables = () => [...(box.value?.querySelectorAll<HTMLElement>('button:not(:disabled), input, textarea, select, [tabindex]') ?? [])].filter((el) => el.tabIndex >= 0)
   watch(open, (isOpen) => nextTick(() => {
     if (isOpen) {
       opener = document.activeElement as HTMLElement | null
