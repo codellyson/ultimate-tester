@@ -49,6 +49,21 @@ export function createActions(root) {
     try { execFileSync('git', ['rev-parse', '--verify', '--quiet', `refs/remotes/${ref}`], { cwd: root, stdio: 'ignore' }); return true; } catch { return false; }
   });
 
+  // The newest test that is still running, wherever it was started (this window, a hook, the CLI):
+  // no verdict, not stopped, and its process is alive.
+  const activeRun = () => {
+    const runs = join(state, 'runs');
+    const latest = existsSync(runs) ? readdirSync(runs).filter((d) => !d.startsWith('.')).sort().at(-1) : null;
+    if (!latest) return null;
+    const dir = join(runs, latest);
+    if (existsSync(join(dir, 'verdict.json')) || existsSync(join(dir, 'stopped'))) return null;
+    try {
+      const pid = Number(readFileSync(join(dir, 'pid'), 'utf8'));
+      process.kill(pid, 0);
+      return { dir, pid };
+    } catch { return null; }
+  };
+
   // Which automatic triggers are installed: Claude Code's Stop hook and/or the git post-commit hook.
   const triggers = () => {
     const read = (f) => { try { return readFileSync(f, 'utf8'); } catch { return ''; } };
@@ -87,7 +102,7 @@ export function createActions(root) {
         // every persona that needs a sign-in has one
         allSignedIn: personas.every((p) => !p.signIn || p.savedAt),
         signingIn: signIn?.persona ?? null,
-        running: !!run,
+        running: !!run || !!activeRun(),
         job,
       };
     },
@@ -210,17 +225,16 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
 
     // Stops the test started from this window: the whole process group (Tess, her browser, the app she started).
     stopRun() {
-      if (!run) throw new Error('No test started from here is running');
-      try { process.kill(-run.pid, 'SIGTERM'); } catch {}
-      const runs = join(state, 'runs');
-      const latest = existsSync(runs) ? readdirSync(runs).sort().at(-1) : null;
-      if (latest) writeFileSync(join(runs, latest, 'stopped'), new Date().toISOString());
+      const active = activeRun();
+      if (!active) throw new Error('No test is running');
+      writeFileSync(join(active.dir, 'stopped'), new Date().toISOString());
+      try { process.kill(active.pid, 'SIGTERM'); } catch {}
     },
 
     // kind: "changes" | "commit" | "range"; target: sha or base..head; note: extra instructions for this run only.
     startRun(kind, target, note) {
       if (typeof note === 'string' && note.length > 1000) throw new Error('Keep the note under 1000 characters');
-      if (run) throw new Error('A test is already running');
+      if (run || activeRun()) throw new Error('A test is already running');
       const args = kind === 'commit' ? ['--commit', target || 'HEAD'] : kind === 'range' ? ['--range', target] : [];
       if (kind === 'range' && !/^[\w./-]+\.\.[\w./-]+$/.test(target ?? '')) throw new Error('A release is two refs, like origin/prd..HEAD');
       if (kind === 'commit' && target && !/^[\w./-]+$/.test(target)) throw new Error('That is not a commit or branch name');

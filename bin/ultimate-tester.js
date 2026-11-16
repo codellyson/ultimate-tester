@@ -83,7 +83,14 @@ async function runTester(prompt, runDir) {
   return new Promise((resolve) => {
     // ULTIMATE_TESTER_CDP lets `ultimate-tester as <persona>` (run by the tester) reach this browser.
     const env = { ...process.env, ULTIMATE_TESTER_CHILD: '1', ...(browser ? { ULTIMATE_TESTER_CDP: browser.endpoint } : {}) };
-    const child = spawn('claude', args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    // Its own process group, so Stop can end Tess and everything she started (browser tools, the app).
+    const child = spawn('claude', args, { env, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+    const stop = () => {
+      writeFileSync(join(runDir, 'stopped'), new Date().toISOString());
+      try { process.kill(-child.pid, 'SIGTERM'); } catch {}
+    };
+    process.once('SIGTERM', stop);
+    process.once('SIGINT', stop);
     let out = '', err = '', buf = '', result = null;
     const live = join(runDir, 'live.log');
     child.stdout.on('data', (d) => {
@@ -105,6 +112,8 @@ async function runTester(prompt, runDir) {
     const timer = setTimeout(() => child.kill('SIGTERM'), TIMEOUT_MS);
     child.on('close', (code) => {
       clearTimeout(timer);
+      process.off('SIGTERM', stop);
+      process.off('SIGINT', stop);
       browser?.stop();
       writeFileSync(join(runDir, 'claude-output.jsonl'), out || err);
       try {
@@ -112,7 +121,7 @@ async function runTester(prompt, runDir) {
         if (!j.structured_output) throw new Error(j.result || 'no structured output');
         resolve({ verdict: j.structured_output, costUsd: j.total_cost_usd ?? 0 });
       } catch (e) {
-        const why = code === null ? `timed out after ${TIMEOUT_MS / 1000}s` : `tester failed: ${String(e.message || err).slice(0, 300)}`;
+        const why = existsSync(join(runDir, 'stopped')) ? 'You stopped this test.' : code === null ? `timed out after ${TIMEOUT_MS / 1000}s` : `tester failed: ${String(e.message || err).slice(0, 300)}`;
         resolve({ verdict: { status: 'unverified', summary: why, flows: [] }, costUsd: 0 });
       }
     });
@@ -169,6 +178,8 @@ async function run({ commit = null, range = null, dedupe = false, note = '' } = 
   const past = existsSync(runsRoot) ? readdirSync(runsRoot).sort().reverse().map((d) => { try { return JSON.parse(readFileSync(join(runsRoot, d, 'verdict.json'), 'utf8')); } catch { return null; } }) : [];
   const runDir = join(runsRoot, new Date().toISOString().replace(/[:.]/g, '-'));
   mkdirSync(runDir, { recursive: true });
+  // Stop (from the window, whoever started this run) signals this process; see runTester.
+  writeFileSync(join(runDir, 'pid'), String(process.pid));
   writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: change.mode, message: change.message, files: change.files, note, kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit ?? null }));
   const port = await freePort();
   const prompt = readFileSync(join(HOME, 'prompt.md'), 'utf8')
