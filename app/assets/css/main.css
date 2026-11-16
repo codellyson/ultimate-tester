@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Satoshi (Fontshare, ITF Free Font License), self-hosted so the Mac app works offline. No 600: semibold falls to Bold. */
+@font-face { font-family: "Satoshi"; src: url("../fonts/Satoshi-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Satoshi"; src: url("../fonts/Satoshi-Medium.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "Satoshi"; src: url("../fonts/Satoshi-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Satoshi"; src: url("../fonts/Satoshi-Italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@theme { --font-sans: "Satoshi", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+
 /* Ink: neutral greys, black for actions; colour only for results, Tess's orb and the evidence. */
 :root {
   --page: #f7f7f7; --sand: #ededed; --line: #dedede; --ink: #1c1c1e; --muted: #5f5f63;
@@ -11,10 +18,11 @@
 }
 html, body, #__nuxt { height: 100%; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased; background: var(--page); color: var(--ink); font-size: 13px;
 }
-.serif { font-family: "New York", "Iowan Old Style", Georgia, serif; }
+/* Large text (verdicts, Tess speaking): Satoshi pulled in slightly, as display sizes need. */
+.display { letter-spacing: -0.012em; }
 .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .tess { background: radial-gradient(circle at 35% 30%, var(--orb1), var(--orb2) 55%, var(--orb3)); }
 @keyframes breathe { 50% { transform: scale(1.06); } }

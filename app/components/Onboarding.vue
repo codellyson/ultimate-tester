@@ -81,7 +81,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
       <!-- 0 · Welcome -->
       <template v-if="step === 0">
         <div class="tess size-[72px] rounded-full shadow-sm breathe" aria-hidden="true" />
-        <h1 class="serif text-[34px] leading-[1.15] text-balance">Hi, I'm Tess. I test your app the way a person would, every time it changes.</h1>
+        <h1 class="display text-[34px] leading-[1.15] font-medium text-balance">Hi, I'm Tess. I test your app the way a person would, every time it changes.</h1>
         <div class="grid sm:grid-cols-3 gap-3">
           <div class="rounded-2xl bg-white surface p-4 flex flex-col gap-1.5"><b class="font-semibold">I run it</b><span class="text-[var(--muted)]">I start your app on my own port and click through it in a real browser.</span></div>
           <div class="rounded-2xl bg-white surface p-4 flex flex-col gap-1.5"><b class="font-semibold">I sign in as your users</b><span class="text-[var(--muted)]">Owners, staff, shoppers. Each sees different things, so I test as each.</span></div>

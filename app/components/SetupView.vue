@@ -12,7 +12,7 @@ async function draft() { if (await setupAction('draft')) state.confirmJustDrafte
 <template>
   <section class="flex-1 min-h-0 overflow-y-auto">
     <div class="max-w-3xl mx-auto px-10 py-10 flex flex-col gap-6">
-      <h1 class="serif text-[26px] leading-tight text-balance">{{ s.profileReady && s.allSignedIn ? `How Tess tests ${app.name}` : `Setting up ${app.name}` }}</h1>
+      <h1 class="display text-[26px] leading-tight font-medium text-balance">{{ s.profileReady && s.allSignedIn ? `How Tess tests ${app.name}` : `Setting up ${app.name}` }}</h1>
 
       <template v-if="!s.profileReady || drafting">
         <TessSays v-if="drafting">Reading {{ app.name }}… I'm looking at how it starts, what it talks to, who uses it and what they do most.</TessSays>

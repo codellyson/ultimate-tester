@@ -154,7 +154,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 <template>
   <section class="flex-1 min-h-0 flex flex-col">
     <div class="shrink-0 px-6 py-4 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-[var(--line)]">
-      <h1 class="serif text-[26px] leading-tight font-normal text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
+      <h1 class="display text-[26px] leading-tight font-medium text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
       <p class="text-[var(--muted)] flex flex-wrap gap-x-1.5" :title="v?.usage">
         <template v-for="(m, i) in meta" :key="m.text"><span v-if="i" aria-hidden="true">·</span><span :class="m.cls">{{ m.text }}</span></template>
       </p>
@@ -195,7 +195,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           <div class="tess breathe size-11 rounded-full shrink-0 shadow-md" aria-hidden="true" />
           <div :key="bubble" class="rise flex-1 min-w-0 rounded-2xl rounded-es-sm bg-[var(--bubble)] text-[var(--bubble-fg)] px-5 py-3 shadow-sm max-w-3xl max-h-[28vh] overflow-y-auto" :style="{ boxShadow: bubbleEdge }" aria-live="polite">
             <p class="text-[12px] text-[var(--bubble-muted)] mb-0.5">{{ bubbleLabel }}</p>
-            <p class="serif text-[16px] leading-relaxed max-w-[68ch] text-pretty">{{ bubble }}</p>
+            <p class="display text-[16px] leading-relaxed max-w-[68ch] text-pretty">{{ bubble }}</p>
           </div>
         </div>
       </main>
@@ -210,7 +210,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
         </div>
         <div v-show="state.rail === 'checks'" id="panel-checks" ref="rail" role="tabpanel" aria-labelledby="tab-checks" class="flex-1 min-h-0 overflow-y-auto p-4">
           <h2 class="sr-only">Checks</h2>
-          <p v-if="r.intro" class="pb-1 text-[13px] text-[var(--muted)] serif italic">"{{ r.intro }}"</p>
+          <p v-if="r.intro" class="pb-1 text-[13px] text-[var(--muted)] display italic">"{{ r.intro }}"</p>
           <p v-if="!plan.length" class="text-[var(--muted)]">{{ live ? 'Tess is working out what to check…' : 'No checklist for this test.' }}</p>
           <div v-for="g in groups" :key="g.gk" class="flex flex-col gap-0.5">
             <div class="pt-3 pb-1 flex items-baseline justify-between gap-2">
