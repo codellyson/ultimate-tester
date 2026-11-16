@@ -52,6 +52,10 @@ body {
 }
 /* Large text (verdicts, Tess speaking): Satoshi pulled in slightly, as display sizes need. */
 .display { letter-spacing: -0.012em; }
+/* Placeholders are hints people must be able to read (WebKit's default grey is 3.3:1 on white). */
+::placeholder { color: var(--muted); opacity: 1; }
+/* No single word left alone on a paragraph's last line. */
+p, li { text-wrap: pretty; }
 .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .tess { background: radial-gradient(circle at 35% 30%, var(--orb1), var(--orb2) 55%, var(--orb3)); }
 @keyframes breathe { 50% { transform: scale(1.06); } }
