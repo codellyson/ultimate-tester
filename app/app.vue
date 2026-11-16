@@ -28,11 +28,12 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); document.r
     <div class="flex-1 min-h-0 flex">
     <Sidebar v-if="showSidebar" />
     <Transition name="view" mode="out-in">
-    <Onboarding v-if="!state.appId" key="welcome" />
+    <div v-if="!state.booted" key="boot" class="flex-1 bg-[var(--page)]" />
+    <Onboarding v-else-if="!state.appId" key="welcome" />
     <Onboarding v-else-if="state.view === 'onboard' && state.setup" :key="state.appId" />
     <SetupView v-else-if="state.view === 'setup' && state.setup" />
     <RunView v-else-if="state.view === 'run' && state.detail" :key="state.runId ?? 'run'" />
-    <div v-else class="flex-1 min-w-0 grid place-items-center text-[var(--muted)]">Loading…</div>
+    <div v-else key="wait" class="flex-1 min-w-0" aria-busy="true" />
     </Transition>
     </div>
     <template v-if="!state.inSettings"><CommandPalette /><CustomTestSheet /></template>

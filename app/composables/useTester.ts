@@ -41,6 +41,7 @@ const state = reactive({
   sheet: false, // the "Test a commit or range" sheet
   sidebar: true,
   inSettings: false, // this page is the Settings window
+  booted: false, // the app list has loaded once; until then nothing renders (no Welcome flash)
 })
 
 const OFFLINE = "Can't reach Ultimate Tester's engine. It restarts by itself; try again in a few seconds."
@@ -70,6 +71,11 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 async function loadApps() {
   const apps = await api<App[]>('/api/apps')
   if (!same(apps, state.apps)) state.apps = apps
+  // First good answer: now we know whether there are apps. If the engine was down at launch, pick one now.
+  if (!state.booted) {
+    state.booted = true
+    if (bootDone && !state.appId && apps[0]) selectApp(apps[0].id)
+  }
   if (!state.inSettings) announce(apps)
 }
 
@@ -127,7 +133,8 @@ function selectApp(id: string) {
 
 function show(v: 'setup' | 'run' | 'onboard') {
   state.view = v
-  history.replaceState(null, '', `?app=${state.appId}${v !== 'run' ? `&view=${v}` : ''}`)
+  // Only Setup is kept in the URL; onboarding is decided by the app's state, so a reload never lands in it.
+  history.replaceState(null, '', `?app=${state.appId}${v === 'setup' ? '&view=setup' : ''}`)
   refresh()
 }
 
@@ -201,6 +208,7 @@ async function setupAction(path: string, body: unknown = {}) {
 }
 
 let started = false
+let bootDone = false // boot has chosen the app from the URL; later picks are for a late engine
 async function boot() {
   if (started) return
   started = true
@@ -225,10 +233,11 @@ async function boot() {
     if (state.view === 'run' || state.view === 'onboard' || s?.job?.status === 'working' || s?.signingIn) refresh()
   }, 1000)
   setInterval(() => loadApps().catch(() => {}), 5000)
+  bootDone = true
   if (!state.appId) return
   selectApp(state.appId)
   const v = params.get('view')
-  if (v === 'setup' || v === 'onboard') show(v)
+  if (v === 'setup') show(v)
 }
 
 export function useTester() {
