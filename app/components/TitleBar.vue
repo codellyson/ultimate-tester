@@ -100,7 +100,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
         <textarea v-model="state.note" maxlength="1000" rows="2" class="field mt-1.5 resize-none" placeholder="e.g. Focus on checkout with a discount code" />
       </label>
       <p class="px-3 pt-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">What should Tess test?</p>
-      <button v-for="t in [...TARGETS, { kind: 'custom', label: 'Something else…', hint: 'a commit or range' }]" :key="t.label" class="menu-item" :disabled="disabledNew" @click="startTest(t)">
+      <button v-for="t in [...targetsFor(state.setup?.remotes), { kind: 'custom', label: 'Something else…', hint: 'a commit or range' }]" :key="t.label" class="menu-item" :disabled="disabledNew" @click="startTest(t)">
         <span class="flex-1 whitespace-nowrap">{{ t.label }}</span><span class="text-[12px] text-[var(--muted)] text-end">{{ t.hint }}</span>
       </button>
     </div></Transition>

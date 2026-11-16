@@ -10,7 +10,7 @@ const commands = computed<Cmd[]>(() => {
   const list: Cmd[] = []
   state.runs.slice(0, 8).forEach((r, i) => list.push({ group: 'Open', label: `${short(r.title)} · ${when(r.id)} · ${statusOf(r.status).word}`, hint: i < 4 ? `⌘${i + 1}` : '', run: () => openRun(r.id) }))
   list.push({ group: 'Open', label: 'Setup: how Tess tests this app', run: () => show('setup') })
-  for (const t of TARGETS) list.push({ group: 'Test', label: `Test ${t.label.toLowerCase()}`, hint: t.hint, run: () => startTest(t) })
+  for (const t of targetsFor(state.setup?.remotes)) list.push({ group: 'Test', label: `Test ${t.label.toLowerCase()}`, hint: t.hint, run: () => startTest(t) })
   list.push({ group: 'Test', label: 'Test something else…', run: () => startTest({ kind: 'custom' }) })
   for (const p of state.setup?.personas ?? []) if (p.signIn) list.push({ group: 'Sign in as', label: shortLabel(p.label), hint: p.savedAt ? 'signed in' : 'not signed in', run: () => show('setup') })
   for (const a of state.apps) if (a.id !== state.appId) list.push({ group: 'Apps', label: `Switch to ${a.name}`, run: () => selectApp(a.id) })

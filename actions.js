@@ -42,6 +42,12 @@ export function createActions(root) {
 
   const set = (kind, status, message, steps = []) => { job = { kind, status, message, steps }; };
 
+  // Only the release bases the window offers (TARGETS in app/utils/format.ts); a big repo has hundreds of branches.
+  const RELEASE_BASES = ['origin/prd', 'origin/main'];
+  const remoteBranches = () => RELEASE_BASES.filter((ref) => {
+    try { execFileSync('git', ['rev-parse', '--verify', '--quiet', `refs/remotes/${ref}`], { cwd: root, stdio: 'ignore' }); return true; } catch { return false; }
+  });
+
   // Which automatic triggers are installed: Claude Code's Stop hook and/or the git post-commit hook.
   const triggers = () => {
     const read = (f) => { try { return readFileSync(f, 'utf8'); } catch { return ''; } };
@@ -71,6 +77,8 @@ export function createActions(root) {
         // Apps set up before onboarding existed count as onboarded once they have a test.
         onboarded: existsSync(join(state, 'onboarded')) || (profileReady && hasRuns),
         triggers: triggers(),
+        // Remote branches, so release choices only show for branches this repo has.
+        remotes: remoteBranches(),
         start: parseStart(profile),
         personas,
         // every persona that needs a sign-in has one

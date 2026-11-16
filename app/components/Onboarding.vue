@@ -47,11 +47,12 @@ const WHEN = [
   { mode: 'manual', title: 'Only when I ask', hint: 'From the + menu or ⌘K.' },
 ] as const
 const target = ref(0)
+const targets = computed(() => targetsFor(s.value?.remotes).slice(0, 3))
 const starting = ref(false)
 async function begin() {
   starting.value = true
   const ok = (await setupAction('trigger', { mode: trigger.value })) && (await setupAction('onboarded'))
-  if (ok) await startTest(TARGETS[target.value]!)
+  if (ok) await startTest(targets.value[target.value]!)
   starting.value = false
 }
 async function skip() { if (state.appId && (await setupAction('onboarded'))) show('setup') }
@@ -175,7 +176,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
         <div class="ms-12 flex flex-col gap-3">
           <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="What to test">
             <button
-              v-for="(t, i) in TARGETS.slice(0, 3)" :key="t.label" role="radio" :aria-checked="target === i"
+              v-for="(t, i) in targets" :key="t.label" role="radio" :aria-checked="target === i"
               :class="['rounded-full px-3 py-1 text-[12px]', target === i ? 'bg-[var(--ink)] text-white font-medium' : 'bg-[var(--sand)] hover:bg-[var(--line)]']"
               @click="target = i"
             >

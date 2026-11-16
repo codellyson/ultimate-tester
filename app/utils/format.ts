@@ -35,6 +35,10 @@ export const TARGETS = [
 ] as const
 export type Target = { kind: string, target?: string, label?: string, hint?: string }
 
+// Release choices only for branches the repo actually has (no origin/prd, no "Release to prd").
+export const targetsFor = (remotes: string[] = []) =>
+  TARGETS.filter((t) => t.kind !== 'range' || remotes.includes(t.target.split('..')[0]!))
+
 // Raw tester actions as short human chips: "opened /customers", "clicked Save".
 export function chipText(step: string) {
   const m = step.match(/^do: browser (\w+)\s*(.*)$/)

@@ -12,7 +12,7 @@ export type RunDetail = RunInfo & {
 }
 export type Persona = { key: string, label: string, signIn: boolean, savedAt: string | null }
 export type Setup = {
-  profile: string, profileReady: boolean, onboarded: boolean, triggers: { stop: boolean, commit: boolean },
+  profile: string, profileReady: boolean, onboarded: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
   personas: Persona[], allSignedIn: boolean, signingIn: string | null, running: boolean,
   job: { kind: string | null, status: string, message: string, steps: string[] }
 }

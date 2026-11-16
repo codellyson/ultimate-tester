@@ -43,7 +43,7 @@ async function draft() { if (await setupAction('draft')) state.confirmJustDrafte
             All set. What should I test?
             <template #actions>
               <div class="flex flex-wrap gap-2">
-                <button v-for="t in TARGETS.slice(0, 3)" :key="t.label" class="btn" :disabled="s.running" @click="startTest(t)">{{ t.label }}</button>
+                <button v-for="t in targetsFor(s.remotes).slice(0, 3)" :key="t.label" class="btn" :disabled="s.running" @click="startTest(t)">{{ t.label }}</button>
               </div>
             </template>
           </TessSays>
