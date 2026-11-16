@@ -21,7 +21,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
 </script>
 
 <template>
-  <header class="h-11 shrink-0 flex items-center gap-1.5 ps-20 pe-3 border-b border-[var(--line)] bg-[var(--sand)] relative" data-tauri-drag-region>
+  <header class="h-11 shrink-0 flex items-center gap-1.5 ps-[88px] pe-3 border-b border-[var(--line)] bg-[var(--sand)] relative" data-tauri-drag-region>
     <button
       class="crumb font-medium"
       aria-haspopup="true" :aria-expanded="state.menu === 'app'"
@@ -61,7 +61,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
       aria-label="Commands (⌘K)" @click="state.menu = null; state.cmdk = true"
     ><kbd class="text-[11px] font-sans">⌘K</kbd></button>
 
-    <div v-if="state.menu === 'app'" class="absolute start-20 top-10 z-30 w-72 rounded-xl bg-white surface-float p-1.5" @click.stop>
+    <div v-if="state.menu === 'app'" class="absolute start-[88px] top-10 z-30 w-72 rounded-xl bg-white surface-float p-1.5" @click.stop>
       <button
         v-for="a in state.apps" :key="a.id" class="menu-item"
         :class="a.id === state.appId && 'bg-[var(--sand)] font-medium'" :aria-current="a.id === state.appId ? 'true' : undefined"
