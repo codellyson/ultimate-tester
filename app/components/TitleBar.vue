@@ -104,7 +104,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
       </button>
     </div></Transition>
   </header>
-  <Transition name="reveal"><p v-if="state.flash" class="px-5 py-2 text-[12px] bg-[var(--accent-soft)] text-[var(--bad)] border-b border-[var(--line)] flex gap-3" role="alert">
+  <Transition name="reveal"><p v-if="state.flash" class="px-5 py-2 text-[12px] bg-[var(--bad-soft)] text-[var(--bad)] border-b border-[var(--line)] flex gap-3" role="alert">
     <span class="flex-1">{{ state.flash }}</span>
     <button class="link text-[12px]" @click="state.flash = ''">Dismiss</button>
   </p></Transition>

@@ -218,7 +218,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
             </div>
             <TransitionGroup name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.problems" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
             <button
-              v-for="f in g.fixes" :key="f.who?.key ?? '-'" class="mt-1.5 mb-1 self-start text-start rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] px-3 py-1.5 text-[13px] font-medium hover:brightness-[0.98]"
+              v-for="f in g.fixes" :key="f.who?.key ?? '-'" class="mt-1.5 mb-1 self-start text-start rounded-lg bg-white ring-1 ring-[var(--line)] text-[var(--ink)] px-3 py-1.5 text-[13px] font-medium hover:bg-[var(--page)]"
               @click="show('setup')"
             >
               {{ f.who ? `Sign in as ${shortLabel(f.who.label)} to check ${f.n === 1 ? 'this' : `these ${f.n}`}` : `${f.n} check${plural(f.n)} couldn't run. Fix in Setup` }}
@@ -231,9 +231,9 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           </div>
           <ul v-if="finished && others.length" class="mt-3 flex flex-col"><CheckRow :item="{ name: OTHER, status: 'pass' }" :label="`Other screenshots (${others.length})`" :finished="finished" :shots="others.length" @pick="pick" /></ul>
         </div>
-        <div v-show="state.rail === 'log'" id="panel-log" role="tabpanel" aria-labelledby="tab-log" class="flex-1 min-h-0 overflow-y-auto bg-[#1b241e] text-[#dfe8dc] p-4 mono text-[11px] leading-5">
+        <div v-show="state.rail === 'log'" id="panel-log" role="tabpanel" aria-labelledby="tab-log" class="flex-1 min-h-0 overflow-y-auto bg-[var(--log)] text-[var(--log-fg)] p-4 mono text-[11px] leading-5">
           <h2 class="sr-only">Log</h2>
-          <p v-for="(s, i) in r.steps" :key="i" :class="s.startsWith('say: ') ? 'text-[#cfe3d2] font-sans text-[13px] my-1' : 'text-[#dfe8dc]/70 break-all'">{{ s.startsWith('say: ') ? `Tess  ${s.slice(5)}` : `·  ${s.slice(4)}` }}</p>
+          <p v-for="(s, i) in r.steps" :key="i" :class="s.startsWith('say: ') ? 'text-[var(--log-say)] font-sans text-[13px] my-1' : 'text-[var(--log-fg)]/70 break-all'">{{ s.startsWith('say: ') ? `Tess  ${s.slice(5)}` : `·  ${s.slice(4)}` }}</p>
         </div>
       </aside>
     </div>
