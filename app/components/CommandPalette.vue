@@ -38,8 +38,8 @@ function key(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div v-if="state.cmdk" class="fixed inset-0 z-40 bg-black/20 grid place-items-start justify-center pt-24" role="dialog" aria-modal="true" aria-label="Commands" @click.self="state.cmdk = false">
-    <div class="w-[520px] max-w-[92vw] rounded-xl bg-white surface-float overflow-hidden">
+  <Transition name="palette"><div v-if="state.cmdk" class="fixed inset-0 z-40 bg-black/20 grid place-items-start justify-center pt-24" role="dialog" aria-modal="true" aria-label="Commands" @click.self="state.cmdk = false">
+    <div class="origin-top w-[520px] max-w-[92vw] rounded-xl bg-white surface-float overflow-hidden">
       <input
         ref="input" v-model="q" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list"
         :aria-activedescendant="sel >= 0 ? `cmd-${sel}` : undefined" aria-label="Command" placeholder="What should Tess do?"
@@ -59,5 +59,5 @@ function key(e: KeyboardEvent) {
         <p v-if="!shown.length" class="px-3 py-3 text-[var(--muted)]">Nothing matches.</p>
       </div>
     </div>
-  </div>
+  </div></Transition>
 </template>

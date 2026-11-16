@@ -159,7 +159,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
       </p>
       <div v-if="live" class="w-full min-[880px]:w-[320px] min-[880px]:ms-auto self-center">
         <div class="flex h-2 rounded-full overflow-hidden bg-[var(--sand)]">
-          <span v-for="(b, i) in bar" :key="i" :class="i === 3 && 'pulse'" :style="{ width: b.width, background: b.color }" />
+          <span v-for="(b, i) in bar" :key="i" :class="['transition-[width] duration-300 ease-out', i === 3 && 'pulse']" :style="{ width: b.width, background: b.color }" />
         </div>
         <p class="mt-1.5 text-[12px] text-[var(--muted)]">{{ pass }} passed<template v-if="fail"> · <b class="text-[var(--bad)]">{{ fail }} broke</b></template><template v-if="unk"> · <b class="text-[var(--warn)]">{{ unk }} can't check</b></template> · {{ todo }} to go</p>
       </div>
@@ -175,8 +175,11 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
             <span v-if="asWho" class="shrink-0 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] px-2 py-0.5 text-[11px] font-medium">as {{ asWho }}</span>
           </div>
           <div class="relative flex-1 min-h-0">
-            <img v-if="screen.src" :src="screen.src" :alt="screen.alt" class="absolute inset-0 size-full object-contain object-top">
-            <p v-else class="absolute inset-0 grid place-items-center text-[var(--muted)] px-6 text-center">{{ screen.empty }}</p>
+            <!-- Evidence crossfades between checks; the live screen swaps in place so it never flickers. -->
+            <Transition name="fade">
+              <img v-if="screen.src" :key="live ? 'live' : screen.src" :src="screen.src" :alt="screen.alt" class="absolute inset-0 size-full object-contain object-top">
+              <p v-else key="empty" class="absolute inset-0 grid place-items-center text-[var(--muted)] px-6 text-center">{{ screen.empty }}</p>
+            </Transition>
             <div class="absolute end-4 top-4 flex flex-col items-end gap-1.5">
               <span
                 v-for="(c, i) in chips" :key="`${i}${c}`"
@@ -213,7 +216,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
               <h3 v-if="g.title" class="font-semibold leading-snug">{{ g.title }}</h3><span v-else />
               <span class="shrink-0 text-[var(--muted)]">{{ g.ok }} of {{ g.total }} passed</span>
             </div>
-            <ul class="flex flex-col"><CheckRow v-for="p in g.problems" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></ul>
+            <TransitionGroup name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.problems" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
             <button
               v-for="f in g.fixes" :key="f.who?.key ?? '-'" class="mt-1.5 mb-1 self-start text-start rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] px-3 py-1.5 text-[13px] font-medium hover:brightness-[0.98]"
               @click="show('setup')"
@@ -222,8 +225,8 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
               <span class="inline-block rtl:-scale-x-100">→</span>
             </button>
             <template v-if="g.passed.length">
-              <button class="mt-1 py-1 text-start text-[13px] text-[var(--muted)] hover:text-[var(--ink)] flex gap-2" :aria-expanded="g.open" @click="toggleFold(g.gk)">{{ g.open ? '⌃' : '⌄' }} {{ g.passed.length }} passed</button>
-              <ul v-if="g.open" class="flex flex-col"><CheckRow v-for="p in g.passed" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></ul>
+              <button class="mt-1 py-1 text-start text-[13px] text-[var(--muted)] hover:text-[var(--ink)] flex gap-2" :aria-expanded="g.open" @click="toggleFold(g.gk)"><span :class="['inline-block transition-[rotate] duration-150', g.open && 'rotate-180']" aria-hidden="true">⌄</span> {{ g.passed.length }} passed</button>
+              <Transition name="reveal"><TransitionGroup v-if="g.open" name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.passed" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup></Transition>
             </template>
           </div>
           <ul v-if="finished && others.length" class="mt-3 flex flex-col"><CheckRow :item="{ name: OTHER, status: 'pass' }" :label="`Other screenshots (${others.length})`" :finished="finished" :shots="others.length" @pick="pick" /></ul>

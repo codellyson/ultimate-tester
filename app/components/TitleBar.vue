@@ -30,7 +30,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
     >
       <span class="size-5 rounded-[5px] bg-white ring-1 ring-[var(--line)] text-[var(--muted)] grid place-items-center text-[10px] font-semibold shrink-0" aria-hidden="true">{{ app ? app.name[0]!.toUpperCase() : '+' }}</span>
       <span class="truncate max-w-48">{{ app?.name ?? 'Add an app' }}</span>
-      <span v-if="app" class="text-[var(--muted)] text-[10px]" aria-hidden="true">▾</span>
+      <span v-if="app" :class="['text-[var(--muted)] text-[10px] transition-[rotate] duration-150', state.menu === 'app' && 'rotate-180']" aria-hidden="true">▾</span>
     </button>
 
     <template v-if="app && (where || state.runs.length)">
@@ -45,13 +45,13 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
         <span v-else-if="run" :class="[statusOf(run.status).cls, 'shrink-0']" aria-hidden="true">{{ statusOf(run.status).icon }}</span>
         <span class="truncate">{{ short(run?.title) }}</span>
         <span v-if="run" class="text-[var(--muted)] shrink-0 tabular-nums">{{ when(run.id) }}</span>
-        <span class="text-[var(--muted)] text-[10px]" aria-hidden="true">▾</span>
+        <span :class="['text-[var(--muted)] text-[10px] transition-[rotate] duration-150', state.menu === 'runs' && 'rotate-180']" aria-hidden="true">▾</span>
       </button>
     </template>
 
-    <span v-if="state.offline" class="ms-auto flex items-center gap-1.5 px-2 text-[12px] text-[var(--warn)]" role="status">
+    <Transition name="fade"><span v-if="state.offline" class="ms-auto flex items-center gap-1.5 px-2 text-[12px] text-[var(--warn)]" role="status">
       <span class="size-1.5 rounded-full bg-[var(--warn)] pulse" aria-hidden="true" />Reconnecting…
-    </span>
+    </span></Transition>
     <button
       v-if="app" ref="newBtn" :class="['btn shrink-0 h-7 py-0', !state.offline && 'ms-auto']"
       aria-haspopup="true" :aria-expanded="state.menu === 'new'" @click.stop="toggle('new')"
@@ -61,7 +61,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
       aria-label="Commands (⌘K)" @click="state.menu = null; state.cmdk = true"
     ><kbd class="text-[11px] font-sans">⌘K</kbd></button>
 
-    <div v-if="state.menu === 'app'" class="absolute start-[88px] top-10 z-30 w-72 rounded-xl bg-white surface-float p-1.5" @click.stop>
+    <Transition name="pop"><div v-if="state.menu === 'app'" class="origin-top-left absolute start-[88px] top-10 z-30 w-72 rounded-xl bg-white surface-float p-1.5" @click.stop>
       <button
         v-for="a in state.apps" :key="a.id" class="menu-item"
         :class="a.id === state.appId && 'bg-[var(--sand)] font-medium'" :aria-current="a.id === state.appId ? 'true' : undefined"
@@ -74,9 +74,9 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
       <div class="my-1 border-t border-[var(--line)]" />
       <button class="menu-item text-[var(--muted)]" @click="state.menu = null; show('setup')">Setup: how Tess tests {{ app?.name }}</button>
       <button class="menu-item text-[var(--muted)]" @click="addApp()">+ Add an app…</button>
-    </div>
+    </div></Transition>
 
-    <div v-if="state.menu === 'runs'" class="absolute top-10 z-30 w-80 max-h-[60vh] overflow-y-auto rounded-xl bg-white surface-float p-1.5" :style="{ left: `${left}px` }" @click.stop>
+    <Transition name="pop"><div v-if="state.menu === 'runs'" class="origin-top-left absolute top-10 z-30 w-80 max-h-[60vh] overflow-y-auto rounded-xl bg-white surface-float p-1.5" :style="{ left: `${left}px` }" @click.stop>
       <p class="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Tests</p>
       <button
         v-for="(r, i) in state.runs.slice(0, 30)" :key="r.id" class="menu-item"
@@ -91,9 +91,9 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
         <span class="text-[12px] text-[var(--muted)] tabular-nums shrink-0">{{ when(r.id) }}</span>
         <kbd v-if="i < 4" class="text-[11px] text-[var(--muted)] font-sans w-6 text-end shrink-0">⌘{{ i + 1 }}</kbd>
       </button>
-    </div>
+    </div></Transition>
 
-    <div v-if="state.menu === 'new'" class="absolute top-10 z-30 w-80 rounded-xl bg-white surface-float p-1.5" :style="{ left: `${Math.max(8, left - 320)}px` }" @click.stop>
+    <Transition name="pop"><div v-if="state.menu === 'new'" class="origin-top-right absolute top-10 z-30 w-80 rounded-xl bg-white surface-float p-1.5" :style="{ left: `${Math.max(8, left - 320)}px` }" @click.stop>
       <label class="block px-3 pt-2 pb-2">
         <span class="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Note for this test <span class="normal-case font-normal tracking-normal">(optional)</span></span>
         <textarea v-model="state.note" maxlength="1000" rows="2" class="field mt-1.5 resize-none" placeholder="e.g. Focus on checkout with a discount code" />
@@ -102,10 +102,10 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
       <button v-for="t in [...TARGETS, { kind: 'custom', label: 'Something else…', hint: 'a commit or range' }]" :key="t.label" class="menu-item" :disabled="disabledNew" @click="startTest(t)">
         <span class="flex-1 whitespace-nowrap">{{ t.label }}</span><span class="text-[12px] text-[var(--muted)] text-end">{{ t.hint }}</span>
       </button>
-    </div>
+    </div></Transition>
   </header>
-  <p v-if="state.flash" class="px-5 py-2 text-[12px] bg-[var(--accent-soft)] text-[var(--bad)] border-b border-[var(--line)] flex gap-3" role="alert">
+  <Transition name="reveal"><p v-if="state.flash" class="px-5 py-2 text-[12px] bg-[var(--accent-soft)] text-[var(--bad)] border-b border-[var(--line)] flex gap-3" role="alert">
     <span class="flex-1">{{ state.flash }}</span>
     <button class="link text-[12px]" @click="state.flash = ''">Dismiss</button>
-  </p>
+  </p></Transition>
 </template>

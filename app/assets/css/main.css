@@ -38,3 +38,61 @@ body {
   .crumb { @apply h-7 flex items-center gap-1.5 rounded-md px-1.5 hover:bg-black/5 aria-expanded:bg-black/5; }
   .menu-item { @apply w-full text-start rounded-md px-3 py-2 hover:bg-[var(--sand)] flex items-center gap-2; }
 }
+
+/* Motion: one curve; feedback in 150ms, view changes in 200ms; exits softer than enters. */
+:root { --ease: cubic-bezier(0.2, 0, 0, 1); }
+@layer base {
+  button, a, input, textarea, select, label, [role="tab"], [role="radio"] {
+    transition-property: background-color, color, border-color, box-shadow, opacity, scale, filter;
+    transition-duration: 150ms;
+    transition-timing-function: var(--ease);
+  }
+}
+/* Press: compact controls dip; full-width rows (menus, checks) only change colour. */
+button:not(.menu-item):not([data-check]):not(.static):active:not(:disabled) { scale: 0.96; }
+
+/* Menus and popovers drop in from their trigger. */
+.pop-enter-active { transition: opacity 150ms var(--ease), scale 150ms var(--ease), translate 150ms var(--ease); }
+.pop-leave-active { transition: opacity 100ms ease-out, translate 100ms ease-out; }
+.pop-enter-from { opacity: 0; scale: 0.96; translate: 0 -4px; }
+.pop-leave-to { opacity: 0; translate: 0 -2px; }
+
+/* Whole screens: rise in, fade out quickly. */
+.view-enter-active { transition: opacity 200ms var(--ease), translate 200ms var(--ease); }
+.view-leave-active { transition: opacity 80ms ease-out; }
+.view-enter-from { opacity: 0; translate: 0 6px; }
+.view-leave-to { opacity: 0; }
+
+/* Onboarding steps move forward in reading direction. */
+.step-enter-active { transition: opacity 200ms var(--ease), translate 200ms var(--ease); }
+.step-leave-active { transition: opacity 100ms ease-out, translate 100ms ease-out; }
+.step-enter-from { opacity: 0; translate: 16px 0; }
+.step-leave-to { opacity: 0; translate: -8px 0; }
+[dir="rtl"] .step-enter-from { translate: -16px 0; }
+[dir="rtl"] .step-leave-to { translate: 8px 0; }
+
+/* Things that open in place: notes, forms, folded lists, banners. */
+.reveal-enter-active { transition: opacity 150ms var(--ease), translate 150ms var(--ease); }
+.reveal-leave-active { transition: opacity 100ms ease-out; }
+.reveal-enter-from { opacity: 0; translate: 0 -4px; }
+.reveal-leave-to { opacity: 0; }
+
+.fade-enter-active, .fade-leave-active { transition: opacity 150ms var(--ease); }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* Checks slide to their new place when their status re-sorts them. */
+.list-move { transition: translate 200ms var(--ease); }
+.list-enter-active { transition: opacity 150ms var(--ease), translate 150ms var(--ease); }
+.list-enter-from { opacity: 0; translate: 0 -4px; }
+.list-leave-active { display: none; }
+
+/* ⌘K: backdrop fades, panel pops. */
+.palette-enter-active, .palette-leave-active { transition: opacity 150ms var(--ease); }
+.palette-enter-active > div { transition: scale 150ms var(--ease), translate 150ms var(--ease); }
+.palette-enter-from, .palette-leave-to { opacity: 0; }
+.palette-enter-from > div { scale: 0.96; translate: 0 -4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation: none !important; }
+  button:active:not(:disabled) { scale: none !important; }
+}

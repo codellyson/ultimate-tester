@@ -31,16 +31,18 @@ const showNote = computed(() => selected.value && props.item.name !== OTHER)
       <span class="flex-1">{{ label ?? item.name }}</span>
       <span v-if="shots > 1" class="text-[12px] text-[var(--muted)] shrink-0">{{ shots }} shots</span>
     </component>
-    <div v-if="showNote" class="ms-6 mb-2 mt-1 flex flex-col gap-1.5 text-[13px] text-[var(--muted)]">
+    <Transition name="reveal"><div v-if="showNote" class="ms-6 mb-2 mt-1 flex flex-col gap-1.5 text-[13px] text-[var(--muted)]">
       <p v-if="item.note" class="text-[var(--ink)] leading-snug">{{ item.note }}</p>
       <p v-if="details?.expected && item.status !== 'pass'">Expected: {{ details.expected }}</p>
       <p v-if="details?.actual && item.status !== 'pass'">Saw: {{ details.actual }}</p>
-      <p v-if="taught" class="text-[var(--ok)]" role="status">Got it. I'll remember that on every run.</p>
-      <form v-else-if="teaching" class="flex flex-col gap-2" @submit.prevent="teach">
+      <Transition name="reveal" mode="out-in">
+      <p v-if="taught" key="taught" class="text-[var(--ok)]" role="status">Got it. I'll remember that on every run.</p>
+      <form v-else-if="teaching" key="form" class="flex flex-col gap-2" @submit.prevent="teach">
         <textarea v-model="lesson" class="field min-h-16" maxlength="500" placeholder="What should I know next time? e.g. “The empty cart is expected for new merchants.”" aria-label="What Tess should know next time" @keydown.meta.enter="teach" />
         <div class="flex gap-2"><button class="btn-blue" :disabled="!lesson.trim()">Teach Tess</button><button type="button" class="btn" @click="teaching = false">Cancel</button></div>
       </form>
-      <button v-else class="link self-start text-[12px]" @click="teaching = true">Tess got this wrong?</button>
-    </div>
+      <button v-else key="ask" class="link self-start text-[12px]" @click="teaching = true">Tess got this wrong?</button>
+      </Transition>
+    </div></Transition>
   </li>
 </template>

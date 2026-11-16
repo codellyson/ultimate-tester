@@ -62,10 +62,10 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
         <li v-for="(name, i) in STEPS" :key="name" class="flex items-center gap-1.5 shrink-0">
           <span v-if="i" class="w-3.5 border-t border-[var(--line)]" aria-hidden="true" />
           <span
-            :class="['flex items-center gap-1.5 rounded-full px-2.5 py-1', i === step ? 'bg-white ring-1 ring-[var(--line)] text-[var(--ink)]' : 'text-[var(--muted)]']"
+            :class="['flex items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors duration-200', i === step ? 'bg-white ring-1 ring-[var(--line)] text-[var(--ink)]' : 'text-[var(--muted)]']"
             :aria-current="i === step ? 'step' : undefined"
           >
-            <b :class="['size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ok)] text-white' : i === step ? 'bg-[var(--accent)] text-white' : 'bg-white ring-1 ring-[var(--line)]']">{{ i < step ? '✓' : i + 1 }}</b>
+            <b :class="['transition-colors duration-200 size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ok)] text-white' : i === step ? 'bg-[var(--accent)] text-white' : 'bg-white ring-1 ring-[var(--line)]']">{{ i < step ? '✓' : i + 1 }}</b>
             <span class="hidden md:inline">{{ name }}</span>
           </span>
         </li>
@@ -73,7 +73,8 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
       <button v-if="state.appId && step > 1" class="link text-[12px] shrink-0" @click="skip">Skip setup</button>
     </nav>
 
-    <div class="max-w-[680px] mx-auto px-6 sm:px-8 py-12 flex flex-col gap-6">
+    <Transition name="step" mode="out-in">
+    <div :key="step" class="max-w-[680px] mx-auto px-6 sm:px-8 py-12 flex flex-col gap-6">
       <!-- 0 · Welcome -->
       <template v-if="step === 0">
         <div class="tess size-[72px] rounded-full shadow-sm breathe" aria-hidden="true" />
@@ -120,7 +121,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
             </div>
           </template>
         </TessSays>
-        <ul v-if="!draftFailed" class="ms-12 rounded-2xl bg-white surface px-5 py-3 flex flex-col" aria-live="polite">
+        <TransitionGroup v-if="!draftFailed" name="list" tag="ul" class="ms-12 rounded-2xl bg-white surface px-5 py-3 flex flex-col" aria-live="polite">
           <li v-for="(f, i) in finds" :key="f" class="py-1 flex items-baseline gap-2.5">
             <span :class="['size-1.5 rounded-full shrink-0 -translate-y-0.5', i === finds.length - 1 ? 'bg-[var(--accent)] pulse' : 'bg-[var(--ok)]']" aria-hidden="true" />
             <span class="truncate">{{ f }}</span>
@@ -128,7 +129,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
           <li v-if="!finds.length" class="py-1 flex items-baseline gap-2.5 text-[var(--muted)]">
             <span class="size-1.5 rounded-full shrink-0 -translate-y-0.5 bg-[var(--accent)] pulse" aria-hidden="true" />Opening the repo…
           </li>
-        </ul>
+        </TransitionGroup>
       </template>
 
       <!-- 2 · Check the plan -->
@@ -138,9 +139,9 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
         <TessSays>Anything I should always keep in mind? Things to focus on, skip, or that look broken but aren't.</TessSays>
         <div class="ms-12 flex flex-col gap-3">
           <textarea v-model="notes" rows="3" maxlength="5000" class="field resize-none" placeholder="e.g. Payments run in test mode. The B2B pages need the B2B owner." aria-label="Things Tess should always keep in mind" />
-          <div v-if="chips.length" class="flex flex-wrap gap-1.5">
+          <TransitionGroup v-if="chips.length" name="fade" tag="div" class="flex flex-wrap gap-1.5">
             <button v-for="c in chips" :key="c" class="rounded-full bg-[var(--sand)] hover:bg-[var(--line)] px-2.5 py-1 text-[12px]" @click="addChip(c)">+ {{ c }}</button>
-          </div>
+          </TransitionGroup>
           <p class="text-[12px] text-[var(--muted)]">This goes into every test. You can change it later, and I add to it when you correct me.</p>
           <div class="flex gap-2"><button class="btn-blue" @click="planOk">Looks right</button></div>
         </div>
@@ -163,7 +164,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
       <template v-else-if="step === 4 && s">
         <TessSays>When should I test? I'm most useful when nobody has to remember to ask.</TessSays>
         <div class="ms-12 rounded-2xl bg-white surface divide-y divide-[var(--line)] overflow-hidden" role="radiogroup" aria-label="When Tess tests">
-          <label v-for="w in WHEN" :key="w.mode" :class="['flex gap-3 items-start px-5 py-3.5 cursor-pointer', trigger === w.mode && 'bg-[var(--accent-soft)]']">
+          <label v-for="w in WHEN" :key="w.mode" :class="['flex gap-3 items-start px-5 py-3.5 cursor-pointer transition-colors duration-150', trigger === w.mode && 'bg-[var(--accent-soft)]']">
             <input v-model="trigger" type="radio" name="trigger" :value="w.mode" class="mt-1 accent-[var(--accent)]">
             <span><b class="font-medium">{{ w.title }}</b><span class="block text-[12px] text-[var(--muted)] mt-0.5">{{ w.hint }}</span></span>
           </label>
@@ -183,5 +184,6 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
         </div>
       </template>
     </div>
+    </Transition>
   </section>
 </template>
