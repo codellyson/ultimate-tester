@@ -50,7 +50,7 @@ async function menu(e: MouseEvent, r: RunInfo) {
 </script>
 
 <template>
-  <nav class="w-60 shrink-0 border-e border-[var(--line)] bg-[var(--sidebar)] flex flex-col min-h-0" aria-label="Tests">
+  <nav class="vibrant w-60 shrink-0 border-e border-[var(--line)] bg-[var(--sidebar)] flex flex-col min-h-0" aria-label="Tests">
     <div ref="list" class="flex-1 min-h-0 overflow-y-auto px-2 pb-3" role="listbox" aria-label="Tests" @keydown="onKey">
       <template v-for="g in groups" :key="g.day">
         <p class="px-2 pt-4 pb-1 text-[11px] font-medium text-[var(--muted)]">{{ g.day }}</p>

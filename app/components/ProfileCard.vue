@@ -31,7 +31,7 @@ async function save() {
 </script>
 
 <template>
-  <div class="max-w-2xl rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)]">
+  <div class="max-w-2xl rounded-[10px] bg-[var(--surface)] surface divide-y divide-[var(--line)]">
     <template v-if="editing === '*'">
       <div class="p-4"><textarea v-model="draft" class="field mono text-[12px] min-h-96" aria-label="Profile Markdown" /></div>
       <div class="flex gap-2 p-4"><button class="btn-blue" @click="save">Save</button><button class="btn" @click="editing = null">Cancel</button></div>

@@ -32,7 +32,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); document.r
     <Onboarding v-else-if="state.view === 'onboard' && state.setup" :key="state.appId" />
     <SetupView v-else-if="state.view === 'setup' && state.setup" />
     <RunView v-else-if="state.view === 'run' && state.detail" :key="state.runId ?? 'run'" />
-    <div v-else class="flex-1 min-w-0 grid place-items-center text-[var(--muted)]">Loading…</div>
+    <div v-else class="flex-1 min-w-0 grid place-items-center bg-[var(--page)] text-[var(--muted)]">Loading…</div>
     </Transition>
     </div>
     <template v-if="!state.inSettings"><CommandPalette /><CustomTestSheet /></template>

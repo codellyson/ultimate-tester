@@ -153,9 +153,9 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 </script>
 
 <template>
-  <section class="flex-1 min-w-0 min-h-0 flex flex-col">
+  <section class="flex-1 min-w-0 min-h-0 flex flex-col bg-[var(--page)]">
     <div class="shrink-0 px-6 py-4 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-[var(--line)]">
-      <h1 class="display text-[26px] leading-tight font-medium text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
+      <h1 class="display text-[20px] leading-tight font-semibold text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
       <p class="text-[var(--muted)] flex flex-wrap gap-x-1.5" :title="v?.usage">
         <template v-for="(m, i) in meta" :key="m.text"><span v-if="i" aria-hidden="true">·</span><span :class="m.cls">{{ m.text }}</span></template>
       </p>
@@ -170,7 +170,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 
     <div class="flex-1 min-h-0 flex flex-col overflow-y-auto min-[880px]:flex-row min-[880px]:overflow-visible">
       <main class="flex-1 min-w-0 p-4 flex flex-col gap-3" aria-label="What Tess saw">
-        <div class="relative flex-1 min-h-[50vh] min-[880px]:min-h-0 rounded-2xl overflow-hidden bg-[var(--canvas)] text-zinc-900 surface flex flex-col">
+        <div class="relative flex-1 min-h-[50vh] min-[880px]:min-h-0 rounded-[10px] overflow-hidden bg-[var(--canvas)] text-zinc-900 surface flex flex-col">
           <div class="h-8 shrink-0 bg-[var(--sand)] border-b border-[var(--line)] flex items-center px-3 text-[12px] text-[var(--muted)] gap-2 min-w-0">
             <span v-if="live" class="size-1.5 rounded-full bg-rose-500 pulse shrink-0" />
             <span class="truncate">{{ screen.label }}</span>
@@ -194,20 +194,21 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
         <!-- Tess speaks under the screen, never over the evidence. -->
         <div class="shrink-0 flex items-end gap-3">
           <div class="tess breathe size-11 rounded-full shrink-0 shadow-md" aria-hidden="true" />
-          <div :key="bubble" class="rise flex-1 min-w-0 rounded-2xl rounded-es-sm bg-[var(--bubble)] text-[var(--bubble-fg)] px-5 py-3 shadow-sm max-w-3xl max-h-[28vh] overflow-y-auto" :style="{ boxShadow: bubbleEdge }" aria-live="polite">
+          <div :key="bubble" class="rise flex-1 min-w-0 rounded-[10px] bg-[var(--bubble)] text-[var(--bubble-fg)] px-5 py-3 shadow-sm max-w-3xl max-h-[28vh] overflow-y-auto" :style="{ boxShadow: bubbleEdge }" aria-live="polite">
             <p class="text-[12px] text-[var(--bubble-muted)] mb-0.5">{{ bubbleLabel }}</p>
-            <p class="display selectable text-[16px] leading-relaxed max-w-[68ch] text-pretty">{{ bubble }}</p>
+            <p class="display selectable text-[14px] leading-relaxed max-w-[68ch] text-pretty">{{ bubble }}</p>
           </div>
         </div>
       </main>
 
       <aside class="w-full border-t min-[880px]:w-72 min-[880px]:border-t-0 min-[880px]:border-s shrink-0 border-[var(--line)] flex flex-col min-h-0" aria-label="Checks and log">
-        <div class="shrink-0 px-4 pt-3 flex gap-1 border-b border-[var(--line)]" role="tablist">
-          <button
-            v-for="t in (['checks', 'log'] as const)" :id="`tab-${t}`" :key="t" role="tab" :aria-selected="state.rail === t" :aria-controls="`panel-${t}`"
-            :class="['px-2.5 py-1.5 -mb-px border-b-2', state.rail === t ? 'border-[var(--accent)] font-medium' : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]']"
-            @click="state.rail = t"
-          >{{ t === 'checks' ? 'Checks' : 'Log' }}</button>
+        <div class="shrink-0 px-4 py-2.5 flex justify-center border-b border-[var(--line)]">
+          <div class="segmented" role="tablist" aria-label="Checks or log">
+            <button
+              v-for="t in (['checks', 'log'] as const)" :id="`tab-${t}`" :key="t" role="tab" :aria-selected="state.rail === t" :aria-controls="`panel-${t}`"
+              @click="state.rail = t"
+            >{{ t === 'checks' ? 'Checks' : 'Log' }}</button>
+          </div>
         </div>
         <div v-show="state.rail === 'checks'" id="panel-checks" ref="rail" role="tabpanel" aria-labelledby="tab-checks" class="flex-1 min-h-0 overflow-y-auto p-4">
           <h2 class="sr-only">Checks</h2>
