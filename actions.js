@@ -199,7 +199,8 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
       if (typeof text !== 'string' || text.length > 5000) throw new Error('Notes are too long');
       if (!existsSync(profileFile)) throw new Error('Set up the profile first');
       const body = text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => (l.startsWith('-') ? l : `- ${l}`)).join('\n');
-      if (body) writeFileSync(profileFile, setSection(readFileSync(profileFile, 'utf8'), 'Notes for Tess', body));
+      // Empty means "no notes": the section goes back to its placeholder rather than keeping the old ones.
+      writeFileSync(profileFile, setSection(readFileSync(profileFile, 'utf8'), 'Notes for Tess', body || "- (anything Tess should always know: areas to focus on, things to skip, known quirks)"));
     },
 
     // mode: "stop" (when Claude Code finishes), "commit" (after every commit) or "manual".

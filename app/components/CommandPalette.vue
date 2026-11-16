@@ -4,6 +4,8 @@ const { state, openRun, openSettings, startTest, rerun, stopTest, selectApp, add
 const q = ref('')
 const sel = ref(-1)
 const input = ref<HTMLInputElement>()
+const box = ref<HTMLElement>()
+const { onTab } = useModalFocus(() => state.cmdk, box)
 
 type Cmd = { group: string, label: string, hint?: string, run: () => void }
 const commands = computed<Cmd[]>(() => {
@@ -40,7 +42,7 @@ function key(e: KeyboardEvent) {
 </script>
 
 <template>
-  <Transition name="palette"><div v-if="state.cmdk" class="fixed inset-0 z-40 bg-black/20 grid place-items-start justify-center pt-24" role="dialog" aria-modal="true" aria-label="Commands" @click.self="state.cmdk = false">
+  <Transition name="palette"><div v-if="state.cmdk" class="fixed inset-0 z-40 bg-black/20 grid place-items-start justify-center pt-24" ref="box" role="dialog" aria-modal="true" @keydown="onTab" aria-label="Commands" @click.self="state.cmdk = false">
     <div class="origin-top w-[520px] max-w-[92vw] rounded-xl bg-[var(--surface)] surface-float overflow-hidden">
       <input
         ref="input" v-model="q" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list"

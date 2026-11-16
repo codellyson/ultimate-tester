@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowPathIcon, ArrowRightIcon, CheckIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/vue/16/solid'
+import { ArrowPathIcon, ArrowRightIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/vue/16/solid'
 // A test: the verdict first, then what Tess saw (driven by the selected check), Tess's words, and the checks.
 import type { PlanItem, Persona } from '~/composables/useTester'
 const { state, openSettings, rerun, stopTest, tauri } = useTester()
@@ -127,6 +127,8 @@ const noEvidence = computed(() => finished.value && !screen.value.src)
 
 // Evidence up close: click or Space for full size; drag it out; right-click to copy or find the file.
 const zoomed = ref(false)
+const zoomBox = ref<HTMLElement>()
+const { onTab: zoomTab } = useModalFocus(() => zoomed.value, zoomBox)
 watch(() => screen.value.src, (src) => { if (!src) zoomed.value = false })
 const shotFile = computed(() => ('file' in screen.value ? (screen.value.file as string) : null))
 async function copyImage() {
@@ -190,7 +192,9 @@ function onKey(e: KeyboardEvent) {
   if (zoomed.value && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); zoomed.value = false; return }
   if (state.view !== 'run' || !finished.value || state.cmdk || state.menu || e.metaKey || e.ctrlKey || e.altKey) return
   if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement as HTMLElement)?.tagName ?? '')) return
-  if (e.key === ' ' && screen.value.src && !(document.activeElement as HTMLElement)?.closest?.('button, a')) { e.preventDefault(); zoomed.value = true; return }
+  // Space enlarges the evidence, also with a check selected from the keyboard (Quick Look-style).
+  const focused = document.activeElement as HTMLElement | null
+  if (e.key === ' ' && screen.value.src && (focused?.dataset.check || !focused?.closest?.('button, a'))) { e.preventDefault(); zoomed.value = true; return }
   const rows = [...(rail.value?.querySelectorAll<HTMLButtonElement>('button[data-check]') ?? [])]
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     if (!rows.length) return
@@ -219,13 +223,14 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 <template>
   <section class="flex-1 min-w-0 min-h-0 flex flex-col">
     <div class="shrink-0 px-6 py-4 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-[var(--line)]">
+      <p class="sr-only" role="status">{{ finished && v ? `${verdict.lead}${verdict.em}` : '' }}</p>
       <h1 class="display text-[26px] leading-tight font-medium text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
       <button v-if="r.status === 'stopped' && r.change" class="btn self-center" title="Run this test again (⌘R)" :disabled="!!state.setup?.running" @click="rerun()">Run again</button>
-      <!-- What this test was of, so you never have to recall it from the sidebar. -->
-      <p v-if="tested" class="basis-full -mt-1 text-[12px] text-[var(--muted)] selectable truncate" :title="tested">{{ tested }}</p>
       <p class="text-[var(--muted)] flex flex-wrap gap-x-1.5" :title="v?.usage">
         <template v-for="(m, i) in meta" :key="m.text"><span v-if="i" aria-hidden="true">·</span><span :class="m.cls">{{ m.text }}</span></template>
       </p>
+      <!-- What this test was of, so you never have to recall it from the sidebar. -->
+      <p v-if="tested" class="basis-full -mt-2 text-[12px] text-[var(--muted)] selectable truncate" :title="tested">{{ tested }}</p>
       <!-- While Tess works, Stop is right here, not only in the Test menu (⌘.). -->
       <button v-if="live && state.setup?.running" class="btn self-center min-[880px]:order-last" title="Stop this test (⌘.)" @click="stopTest()">Stop</button>
       <div v-if="live" class="w-full min-[880px]:w-[320px] min-[880px]:ms-auto self-center">
@@ -243,6 +248,9 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           <div class="h-8 shrink-0 bg-[var(--sand)] border-b border-[var(--line)] flex items-center px-3 text-[12px] text-[var(--muted)] gap-2 min-w-0">
             <span v-if="live" class="size-1.5 rounded-full bg-rose-500 pulse shrink-0" />
             <span class="truncate">{{ screen.label }}</span>
+            <!-- What Tess is doing right now, in the strip above the screen, never over the evidence. -->
+            <span v-if="live && chips.length" class="ms-auto shrink-0 flex items-center gap-1 rounded-full bg-[var(--surface)] px-2 py-0.5 text-[var(--ink)]"><ArrowPathIcon class="size-3.5 spin-slow" aria-hidden="true" />{{ chips.at(-1) }}</span>
+            <span v-if="live && failing" class="shrink-0 flex items-center gap-1 rounded-full bg-[var(--bad)] text-white px-2 py-0.5"><XMarkIcon class="size-3.5" aria-hidden="true" />{{ failing.note || failing.name }}</span>
             <span v-if="asWho" class="shrink-0 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] px-2 py-0.5 text-[11px] font-medium">as {{ asWho }}</span>
           </div>
           <div class="relative flex-1 min-h-0">
@@ -255,13 +263,6 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
               >
               <p v-else key="empty" :class="['absolute inset-0 grid place-items-center px-6 text-center text-pretty', noEvidence ? 'text-[var(--muted)]' : 'text-zinc-500']">{{ screen.empty }}</p>
             </Transition>
-            <div class="absolute end-4 top-4 flex flex-col items-end gap-1.5">
-              <span
-                v-for="(c, i) in chips" :key="`${i}${c}`"
-                :class="['rounded-full px-3 py-1 text-[12px] shadow-sm', i === chips.length - 1 ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] surface text-[var(--muted)]']"
-              ><component :is="i === chips.length - 1 ? ArrowPathIcon : CheckIcon" :class="['size-3.5 inline -mt-0.5 me-1', i === chips.length - 1 && 'spin-slow']" aria-hidden="true" />{{ c }}</span>
-              <span v-if="live && failing" class="rounded-full bg-[var(--bad)] text-white px-3 py-1 text-[12px] shadow"><XMarkIcon class="size-3.5 inline -mt-0.5 me-1" aria-hidden="true" />{{ failing.note || failing.name }}</span>
-            </div>
           </div>
         </div>
         <!-- Tess speaks under the screen, never over the evidence. -->
@@ -278,9 +279,9 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
       </main>
 
       <aside class="w-full border-t min-[880px]:w-72 min-[880px]:border-t-0 min-[880px]:border-s shrink-0 border-[var(--line)] flex flex-col min-h-0" aria-label="Checks and log">
-        <div class="shrink-0 px-4 pt-3 flex gap-1 border-b border-[var(--line)]" role="tablist">
+        <div class="shrink-0 px-4 pt-3 flex gap-1 border-b border-[var(--line)]" role="tablist" aria-label="Checks or log" @keydown.left.right.stop.prevent="state.rail = state.rail === 'checks' ? 'log' : 'checks'; nextTick(() => document.getElementById(`tab-${state.rail}`)?.focus())">
           <button
-            v-for="t in (['checks', 'log'] as const)" :id="`tab-${t}`" :key="t" role="tab" :aria-selected="state.rail === t" :aria-controls="`panel-${t}`"
+            v-for="t in (['checks', 'log'] as const)" :id="`tab-${t}`" :key="t" role="tab" :aria-selected="state.rail === t" :aria-controls="`panel-${t}`" :tabindex="state.rail === t ? 0 : -1"
             :class="['px-2.5 py-1.5 -mb-px border-b-2', state.rail === t ? 'border-[var(--accent)] font-medium' : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]']"
             @click="state.rail = t"
           >{{ t === 'checks' ? 'Checks' : 'Log' }}</button>
@@ -325,9 +326,10 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
     </div>
     <!-- Full-size evidence: Space or Esc closes, ← → still step through the check's screenshots. -->
     <Transition name="fade">
-      <div v-if="zoomed && screen.src" class="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center gap-3 p-8" role="dialog" aria-modal="true" :aria-label="screen.alt" @click.self="zoomed = false">
+      <div v-if="zoomed && screen.src" ref="zoomBox" tabindex="-1" @keydown="zoomTab" class="fixed inset-0 z-50 outline-none bg-black/80 flex flex-col items-center justify-center gap-3 p-8" role="dialog" aria-modal="true" :aria-label="screen.alt" @click.self="zoomed = false">
         <img :src="screen.src" :alt="screen.alt" draggable="true" class="max-w-full min-h-0 flex-1 object-contain rounded-lg shadow-2xl cursor-zoom-out" @click="zoomed = false" @contextmenu="evidenceMenu">
         <p class="text-[12px] text-white/70">{{ screen.label }} · Space or Esc to close</p>
+        <button class="sr-only" @click="zoomed = false">Close</button>
       </div>
     </Transition>
   </section>

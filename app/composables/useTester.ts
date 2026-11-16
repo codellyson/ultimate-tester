@@ -227,6 +227,15 @@ async function boot() {
   const params = new URLSearchParams(location.search)
   state.inSettings = params.get('window') === 'settings'
   const t = tauri()
+  // Scrollbars appear while a pane scrolls and fade a second later (styled in main.css).
+  const fading = new WeakMap<Element, ReturnType<typeof setTimeout>>()
+  document.addEventListener('scroll', (e) => {
+    const el = e.target as Element
+    if (!el?.classList) return
+    el.classList.add('scrolling')
+    clearTimeout(fading.get(el))
+    fading.set(el, setTimeout(() => el.classList.remove('scrolling'), 900))
+  }, true)
   // In the Mac app, right-click never shows WebKit's Reload menu: it is left only where text can be copied.
   if (t) document.addEventListener('contextmenu', (e) => {
     if (!(e.target as HTMLElement).closest?.('input, textarea, .selectable, .mono')) e.preventDefault()

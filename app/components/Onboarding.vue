@@ -15,6 +15,9 @@ type Preflight = { claude: { ok: boolean, plan: string | null, apiKey: boolean }
 const pre = ref<Preflight | null>(null)
 onMounted(async () => { if (step.value === 0) pre.value = await api<Preflight>('/api/preflight').catch(() => null) })
 const nodeOk = computed(() => Number(pre.value?.node.split('.')[0]) >= 20)
+// Setup can't work without Claude Code signed in and Chrome; don't let someone start and fail minutes later.
+const ready = computed(() => !!pre.value?.claude.ok && !!pre.value?.chrome)
+async function recheck() { pre.value = await api<Preflight>('/api/preflight').catch(() => null) }
 const plan = computed(() => {
   const c = pre.value?.claude
   if (!c?.ok) return ''
@@ -39,7 +42,9 @@ const notes = ref(existingNotes())
 const CHIPS = ['Check mobile width too', 'Payments run in test mode', 'Empty states are expected for new accounts', 'Skip the admin area']
 const chips = computed(() => CHIPS.filter((c) => !notes.value.includes(c)))
 const addChip = (c: string) => { notes.value = `${notes.value.trim() ? `${notes.value.trim()}\n` : ''}${c}` }
-async function planOk() { if (!notes.value.trim() || (await setupAction('notes', { text: notes.value }))) go(3) }
+// Saves even when emptied, so clearing the box really clears the notes.
+async function planOk() { if (notes.value.trim() === existingNotes().trim() || (await setupAction('notes', { text: notes.value }))) go(3) }
+const canGoBack = (i: number) => i >= 2 && i < step.value
 
 // 3 · Sign in.
 const needs = computed(() => s.value?.personas.filter((p) => p.signIn && !p.savedAt) ?? [])
@@ -64,13 +69,16 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
       <ol class="flex items-center gap-1.5 mx-auto min-w-0 overflow-x-auto">
         <li v-for="(name, i) in STEPS" :key="name" class="flex items-center gap-1.5 shrink-0">
           <span v-if="i" class="w-3.5 border-t border-[var(--line)]" aria-hidden="true" />
-          <span
-            :class="['flex items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors duration-200', i === step ? 'bg-[var(--surface)] ring-1 ring-[var(--line)] text-[var(--ink)]' : 'text-[var(--muted)]']"
-            :aria-current="i === step ? 'step' : undefined"
+          <!-- Finished steps from "Check the plan" on can be revisited; reading the repo and the welcome can't. -->
+          <component
+            :is="canGoBack(i) ? 'button' : 'span'" :disabled="canGoBack(i) ? undefined : null"
+            :class="['flex items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors duration-200', i === step ? 'bg-[var(--surface)] ring-1 ring-[var(--line)] text-[var(--ink)]' : 'text-[var(--muted)]', canGoBack(i) && 'hover:bg-[var(--hover)]']"
+            :aria-current="i === step ? 'step' : undefined" :aria-label="canGoBack(i) ? `Back to ${name}` : undefined"
+            @click="canGoBack(i) && go(i)"
           >
             <b :class="['transition-colors duration-200 size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ok)] text-white' : i === step ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] ring-1 ring-[var(--line)]']"><CheckIcon v-if="i < step" class="size-3" aria-hidden="true" /><template v-else>{{ i + 1 }}</template></b>
             <span class="hidden md:inline">{{ name }}</span>
-          </span>
+          </component>
         </li>
       </ol>
       <!-- Reopened from Help ▸ Getting Started on an app that is set up: just go back. -->
@@ -108,8 +116,9 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
           </template>
         </ul>
         <div class="flex flex-wrap gap-2">
-          <button class="btn-blue" @click="addApp()">Choose your app's folder</button>
-          <button class="btn" @click="addSample()">Try it on a sample app first</button>
+          <button class="btn-blue" :disabled="!ready" @click="addApp()">Choose your app's folder</button>
+          <button class="btn" :disabled="!ready" @click="addSample()">Try it on a sample app first</button>
+          <button v-if="pre && !ready" class="link text-[12px] self-center" @click="recheck">Check again</button>
         </div>
         <p class="text-[12px] text-[var(--muted)]">Nothing leaves this Mac except what Claude Code already sends. I never see passwords.</p>
       </template>

@@ -52,8 +52,8 @@ async function menu(e: MouseEvent, r: RunInfo) {
 <template>
   <nav class="w-60 shrink-0 border-e border-[var(--line)] bg-[var(--sidebar)] flex flex-col min-h-0" aria-label="Tests">
     <div ref="list" class="flex-1 min-h-0 overflow-y-auto px-2 pb-3" role="listbox" aria-label="Tests" @keydown="onKey">
-      <template v-for="g in groups" :key="g.day">
-        <p class="px-2 pt-4 pb-1 text-[11px] font-medium text-[var(--muted)]">{{ g.day }}</p>
+      <div v-for="g in groups" :key="g.day" role="group" :aria-label="g.day">
+        <p class="px-2 pt-4 pb-1 text-[12px] font-medium text-[var(--muted)]" aria-hidden="true">{{ g.day }}</p>
         <button
           v-for="r in g.runs" :key="r.id" :data-run="r.id" role="option" :aria-selected="r.id === current"
           :tabindex="r.id === current || (!current && r.id === state.runs[0]?.id) ? 0 : -1"
@@ -66,7 +66,7 @@ async function menu(e: MouseEvent, r: RunInfo) {
             <span class="block text-[11px] text-[var(--muted)] tabular-nums"><span class="sr-only">{{ statusOf(r.status).word }}, </span>{{ new Date(started(r.id)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }}</span>
           </span>
         </button>
-      </template>
+      </div>
       <p v-if="!state.runs.length" class="px-2 pt-4 text-[var(--muted)]">No tests yet. Start one with ⌘N.</p>
     </div>
   </nav>
