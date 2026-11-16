@@ -14,9 +14,35 @@
   --bubble: #1c1c1e; --bubble-fg: #f2f2f2; --bubble-muted: #a1a1a6;
   --ok: #2b7a46; --warn: #8a6100; --bad: #c22d37; --bad-soft: #fbecec;
   --sidebar: #f0f0f0; --select: #e0e0e0;
+  --surface: #fff; --surface-hover: #fff; --canvas: #fff; --hover: rgb(0 0 0 / 0.05); --press: rgb(0 0 0 / 0.08);
+  --accent-hover: #3a3a3c; --accent-press: #000;
+  color-scheme: light;
   --log: #1c1c1e; --log-fg: #e5e5e7; --log-say: #ffffff;
   --orb1: #e4f0d8; --orb2: #7fa785; --orb3: #3f6b4b;
 }
+/* Dark: the same Ink rules inverted; follows the Mac's appearance setting. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #1e1e20; --sand: #29292b; --line: #3a3a3d; --ink: #ececee; --muted: #a1a1a6;
+    --accent: #f2f2f2; --accent-soft: #2f2f32; --on-accent: #111113;
+    --bubble: #2c2c2e; --bubble-fg: #f2f2f2; --bubble-muted: #a1a1a6;
+    --ok: #4cc272; --warn: #e6b450; --bad: #ff6b6b; --bad-soft: #3b2325;
+    --log: #141415; --log-fg: #e5e5e7; --log-say: #ffffff;
+    --sidebar: #242426; --select: #3a3a3d;
+    --surface: #2a2a2c; --surface-hover: #323235; --canvas: #fff; --hover: rgb(255 255 255 / 0.06); --press: rgb(255 255 255 / 0.1);
+    --accent-hover: #ffffff; --accent-press: #d8d8d8;
+    color-scheme: dark;
+  }
+  :root .surface { box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 1px 2px rgb(0 0 0 / 0.3); }
+  :root .surface-float { box-shadow: 0 0 0 1px rgb(255 255 255 / 0.1), 0 8px 24px rgb(0 0 0 / 0.45); }
+}
+/* Increase Contrast: real borders instead of faint shadows, stronger secondary text. */
+@media (prefers-contrast: more) {
+  :root { --line: #8e8e93; --muted: #3a3a3c; }
+  :root .surface, :root .surface-float { box-shadow: 0 0 0 1px var(--ink); }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) { :root { --line: #8e8e93; --muted: #d1d1d6; } }
+
 html, body, #__nuxt { height: 100%; }
 body {
   font-family: var(--font-sans);
@@ -41,13 +67,13 @@ body {
 .surface-float { box-shadow: 0 0 0 1px rgb(0 0 0 / 0.06), 0 4px 8px rgb(0 0 0 / 0.06), 0 16px 32px rgb(0 0 0 / 0.08); }
 
 @layer components {
-  .btn { @apply inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] ring-1 ring-[var(--line)] bg-white/70 hover:bg-white active:scale-[0.96] transition-[scale,background-color] duration-150 disabled:opacity-40 disabled:pointer-events-none; }
-  .btn-blue { @apply inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] font-medium bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[color-mix(in_srgb,var(--accent)_82%,white)] shadow-sm active:scale-[0.96] transition-[scale,background-color] duration-150 disabled:opacity-40 disabled:pointer-events-none; }
+  .btn { @apply inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] ring-1 ring-[var(--line)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] active:bg-[var(--sand)] transition-[background-color] duration-150 disabled:opacity-40 disabled:pointer-events-none; }
+  .btn-blue { @apply inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] font-medium bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[var(--accent-hover)] shadow-sm active:bg-[var(--accent-press)] transition-[background-color] duration-150 disabled:opacity-40 disabled:pointer-events-none; }
   /* Quiet row actions (Edit, Add): muted until hovered, so a card of them reads as one list. */
   .link-quiet { @apply text-[var(--muted)] hover:text-[var(--ink)] hover:underline underline-offset-2; }
   .link { @apply text-[var(--ink)] underline decoration-[var(--line)] underline-offset-2 hover:decoration-current; }
-  .field { @apply w-full rounded-lg bg-white ring-1 ring-[var(--line)] focus:ring-2 focus:ring-[var(--accent)] outline-none px-2.5 py-1.5 text-[13px]; }
-  .crumb { @apply h-7 flex items-center gap-1.5 rounded-md px-1.5 hover:bg-black/5 aria-expanded:bg-black/5; }
+  .field { @apply w-full rounded-lg bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--line)] focus:ring-2 focus:ring-[var(--accent)] outline-none px-2.5 py-1.5 text-[13px]; }
+  .crumb { @apply h-7 flex items-center gap-1.5 rounded-md px-1.5 hover:bg-[var(--hover)] aria-expanded:bg-[var(--hover)]; }
   .menu-item { @apply w-full text-start rounded-md px-3 py-2 hover:bg-[var(--sand)] flex items-center gap-2; }
 }
 
@@ -60,8 +86,11 @@ body {
     transition-timing-function: var(--ease);
   }
 }
-/* Press: compact controls dip; full-width rows (menus, checks) only change colour. */
-button:not(.menu-item):not([data-check]):not(.static):active:not(:disabled) { scale: 0.96; }
+/* Like a Mac app: pressed controls darken (never shrink), and window chrome cannot be selected.
+   Content people read and copy (notes, logs, Tess's words, profile values, code) stays selectable. */
+button:not(.btn):not(.btn-blue):active:not(:disabled) { background-color: var(--press); }
+body { -webkit-user-select: none; user-select: none; cursor: default; }
+input, textarea, .selectable, .mono { -webkit-user-select: text; user-select: text; }
 
 /* Menus and popovers drop in from their trigger. */
 .pop-enter-active { transition: opacity 150ms var(--ease), scale 150ms var(--ease), translate 150ms var(--ease); }
@@ -106,7 +135,6 @@ button:not(.menu-item):not([data-check]):not(.static):active:not(:disabled) { sc
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation: none !important; }
-  button:active:not(:disabled) { scale: none !important; }
 }
 
 /* Running status: a slow turn, not a busy spinner. */

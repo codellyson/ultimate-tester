@@ -57,7 +57,7 @@ async function menu(e: MouseEvent, r: RunInfo) {
         <button
           v-for="r in g.runs" :key="r.id" :data-run="r.id" role="option" :aria-selected="r.id === current"
           :tabindex="r.id === current || (!current && r.id === state.runs[0]?.id) ? 0 : -1"
-          :class="['static w-full text-start rounded-md px-2 py-1.5 flex items-start gap-2', r.id === current ? 'bg-[var(--select)]' : 'hover:bg-black/[0.04]']"
+          :class="['static w-full text-start rounded-md px-2 py-1.5 flex items-start gap-2', r.id === current ? 'bg-[var(--select)]' : 'hover:bg-[var(--hover)]']"
           @click="open(r)" @contextmenu="menu($event, r)"
         >
           <component :is="statusOf(r.status).icon" :class="['size-4 shrink-0 mt-px', statusOf(r.status).cls]" aria-hidden="true" />

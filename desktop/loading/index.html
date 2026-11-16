@@ -5,18 +5,21 @@
 <title>Ultimate Tester</title>
 <style>
   html, body { height: 100%; margin: 0; }
-  body { display: grid; place-items: center; background: #f6f7f2; color: #6c766b; font: 14px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  body { display: grid; place-items: center; background: #f7f7f7; color: #5f5f63; -webkit-user-select: none; user-select: none; cursor: default; font: 14px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  @media (prefers-color-scheme: dark) { body { background: #1e1e20; color: #a1a1a6; } }
   .dot { width: 40px; height: 40px; border-radius: 50%; margin: 0 auto 14px; background: radial-gradient(circle at 35% 30%, #e4f0d8, #7fa785 55%, #3f6b4b); display: grid; place-items: center; color: transparent; }
 </style>
 </head>
 <body>
-  <div><div class="dot">T</div><p id="msg">Starting Tess…</p></div>
+  <div><div class="dot">T</div><p id="msg"></p></div>
   <script>
     // The engine is a local Node server the app starts; open it as soon as it answers.
     (async function wait(tries = 0) {
       // no-cors: this page is another origin, so it can only learn that the engine answered, which is enough.
       try { await fetch('http://localhost:4600/health', { mode: 'no-cors' }); location.replace('http://localhost:4600/'); return; } catch {}
-      if (tries === 60) document.getElementById('msg').textContent = 'Tess could not start. Is Node.js installed?';
+      // Quiet for the usual second or two; words only if it is slow, then a way forward if it never comes.
+      if (tries === 6) document.getElementById('msg').textContent = 'Starting Tess…';
+      if (tries === 60) document.getElementById('msg').innerHTML = 'Tess needs Node.js 20 or newer to run.<br>Install it from nodejs.org, then open Ultimate Tester again.';
       setTimeout(() => wait(tries + 1), 500);
     })();
   </script>

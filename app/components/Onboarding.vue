@@ -65,10 +65,10 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
         <li v-for="(name, i) in STEPS" :key="name" class="flex items-center gap-1.5 shrink-0">
           <span v-if="i" class="w-3.5 border-t border-[var(--line)]" aria-hidden="true" />
           <span
-            :class="['flex items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors duration-200', i === step ? 'bg-white ring-1 ring-[var(--line)] text-[var(--ink)]' : 'text-[var(--muted)]']"
+            :class="['flex items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors duration-200', i === step ? 'bg-[var(--surface)] ring-1 ring-[var(--line)] text-[var(--ink)]' : 'text-[var(--muted)]']"
             :aria-current="i === step ? 'step' : undefined"
           >
-            <b :class="['transition-colors duration-200 size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ok)] text-white' : i === step ? 'bg-[var(--accent)] text-white' : 'bg-white ring-1 ring-[var(--line)]']"><CheckIcon v-if="i < step" class="size-3" aria-hidden="true" /><template v-else>{{ i + 1 }}</template></b>
+            <b :class="['transition-colors duration-200 size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ok)] text-white' : i === step ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] ring-1 ring-[var(--line)]']"><CheckIcon v-if="i < step" class="size-3" aria-hidden="true" /><template v-else>{{ i + 1 }}</template></b>
             <span class="hidden md:inline">{{ name }}</span>
           </span>
         </li>
@@ -83,11 +83,11 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
         <div class="tess size-[72px] rounded-full shadow-sm breathe" aria-hidden="true" />
         <h1 class="display text-[34px] leading-[1.15] font-medium text-balance">Hi, I'm Tess. I test your app the way a person would, every time it changes.</h1>
         <div class="grid sm:grid-cols-3 gap-3">
-          <div class="rounded-2xl bg-white surface p-4 flex flex-col gap-1.5"><b class="font-semibold">I run it</b><span class="text-[var(--muted)]">I start your app on my own port and click through it in a real browser.</span></div>
-          <div class="rounded-2xl bg-white surface p-4 flex flex-col gap-1.5"><b class="font-semibold">I sign in as your users</b><span class="text-[var(--muted)]">Owners, staff, shoppers. Each sees different things, so I test as each.</span></div>
-          <div class="rounded-2xl bg-white surface p-4 flex flex-col gap-1.5"><b class="font-semibold">You get one answer</b><span class="text-[var(--muted)]">Safe to push, or not, with a screenshot for every check.</span></div>
+          <div class="rounded-2xl bg-[var(--surface)] surface p-4 flex flex-col gap-1.5"><b class="font-semibold">I run it</b><span class="text-[var(--muted)]">I start your app on my own port and click through it in a real browser.</span></div>
+          <div class="rounded-2xl bg-[var(--surface)] surface p-4 flex flex-col gap-1.5"><b class="font-semibold">I sign in as your users</b><span class="text-[var(--muted)]">Owners, staff, shoppers. Each sees different things, so I test as each.</span></div>
+          <div class="rounded-2xl bg-[var(--surface)] surface p-4 flex flex-col gap-1.5"><b class="font-semibold">You get one answer</b><span class="text-[var(--muted)]">Safe to push, or not, with a screenshot for every check.</span></div>
         </div>
-        <ul class="rounded-2xl bg-white surface divide-y divide-[var(--line)]" aria-label="Is this Mac ready">
+        <ul class="rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)]" aria-label="Is this Mac ready">
           <li v-if="!pre" class="px-4 py-2.5 text-[var(--muted)]">Checking this Mac…</li>
           <template v-else>
             <li class="px-4 py-2.5 flex items-center gap-2 flex-wrap">
@@ -124,7 +124,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
             </div>
           </template>
         </TessSays>
-        <TransitionGroup v-if="!draftFailed" name="list" tag="ul" class="ms-12 rounded-2xl bg-white surface px-5 py-3 flex flex-col" aria-live="polite">
+        <TransitionGroup v-if="!draftFailed" name="list" tag="ul" class="ms-12 rounded-2xl bg-[var(--surface)] surface px-5 py-3 flex flex-col" aria-live="polite">
           <li v-for="(f, i) in finds" :key="f" class="py-1 flex items-baseline gap-2.5">
             <span :class="['size-1.5 rounded-full shrink-0 -translate-y-0.5', i === finds.length - 1 ? 'bg-[var(--accent)] pulse' : 'bg-[var(--ok)]']" aria-hidden="true" />
             <span class="truncate">{{ f }}</span>
@@ -166,8 +166,8 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
       <!-- 4 · When to test, and the first test -->
       <template v-else-if="step === 4 && s">
         <TessSays>When should I test? I'm most useful when nobody has to remember to ask.</TessSays>
-        <div class="ms-12 rounded-2xl bg-white surface divide-y divide-[var(--line)] overflow-hidden" role="radiogroup" aria-label="When Tess tests">
-          <label v-for="w in WHEN" :key="w.mode" :class="['flex gap-3 items-start px-5 py-3.5 cursor-pointer transition-colors duration-150', trigger === w.mode && 'bg-[var(--accent-soft)]']">
+        <div class="ms-12 rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)] overflow-hidden" role="radiogroup" aria-label="When Tess tests">
+          <label v-for="w in WHEN" :key="w.mode" :class="['flex gap-3 items-start px-5 py-3.5 transition-colors duration-150', trigger === w.mode && 'bg-[var(--accent-soft)]']">
             <input v-model="trigger" type="radio" name="trigger" :value="w.mode" class="mt-1 accent-[var(--accent)]">
             <span><b class="font-medium">{{ w.title }}</b><span class="block text-[12px] text-[var(--muted)] mt-0.5">{{ w.hint }}</span></span>
           </label>
@@ -177,7 +177,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
           <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="What to test">
             <button
               v-for="(t, i) in targets" :key="t.label" role="radio" :aria-checked="target === i"
-              :class="['rounded-full px-3 py-1 text-[12px]', target === i ? 'bg-[var(--ink)] text-white font-medium' : 'bg-[var(--sand)] hover:bg-[var(--line)]']"
+              :class="['rounded-full px-3 py-1 text-[12px]', target === i ? 'bg-[var(--accent)] text-[var(--on-accent)] font-medium' : 'bg-[var(--sand)] hover:bg-[var(--line)]']"
               @click="target = i"
             >
               <CheckIcon v-if="target === i" class="size-3.5 inline -mt-0.5 me-0.5" aria-hidden="true" />{{ t.label }}</button>

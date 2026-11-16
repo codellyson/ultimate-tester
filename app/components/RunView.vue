@@ -30,7 +30,8 @@ const verdict = computed(() => {
   const n = (x: number, w: string) => `${x} ${w}${plural(x)}`
   if (v.value?.status === 'pass') {
     const note = /\bnot checked\b|couldn't check|didn't check/i.test(v.value.summary ?? '')
-    return { lead: 'Safe to push. ', em: `All ${pass.value} checks passed${note ? ', with one thing Tess left unchecked' : ''}.`, cls: 'text-[var(--ok)]' }
+    // Something left unchecked is never a plain green yes.
+    return { lead: note ? 'Safe to push what I checked. ' : 'Safe to push. ', em: `All ${pass.value} checks passed${note ? ', with one thing Tess left unchecked' : ''}.`, cls: note ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }
   }
   if (v.value?.status === 'fail') return { lead: "Don't push yet: ", em: `${n(fail.value, 'thing')} broke.`, cls: 'text-[var(--bad)]' }
   if (v.value && pass.value && !fail.value) {
@@ -169,7 +170,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 
     <div class="flex-1 min-h-0 flex flex-col overflow-y-auto min-[880px]:flex-row min-[880px]:overflow-visible">
       <main class="flex-1 min-w-0 p-4 flex flex-col gap-3" aria-label="What Tess saw">
-        <div class="relative flex-1 min-h-[50vh] min-[880px]:min-h-0 rounded-2xl overflow-hidden bg-white text-zinc-900 surface flex flex-col">
+        <div class="relative flex-1 min-h-[50vh] min-[880px]:min-h-0 rounded-2xl overflow-hidden bg-[var(--canvas)] text-zinc-900 surface flex flex-col">
           <div class="h-8 shrink-0 bg-[var(--sand)] border-b border-[var(--line)] flex items-center px-3 text-[12px] text-[var(--muted)] gap-2 min-w-0">
             <span v-if="live" class="size-1.5 rounded-full bg-rose-500 pulse shrink-0" />
             <span class="truncate">{{ screen.label }}</span>
@@ -184,7 +185,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
             <div class="absolute end-4 top-4 flex flex-col items-end gap-1.5">
               <span
                 v-for="(c, i) in chips" :key="`${i}${c}`"
-                :class="['rounded-full px-3 py-1 text-[12px] shadow-sm', i === chips.length - 1 ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-white/95 surface text-[var(--muted)]']"
+                :class="['rounded-full px-3 py-1 text-[12px] shadow-sm', i === chips.length - 1 ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] surface text-[var(--muted)]']"
               ><component :is="i === chips.length - 1 ? ArrowPathIcon : CheckIcon" :class="['size-3.5 inline -mt-0.5 me-1', i === chips.length - 1 && 'spin-slow']" aria-hidden="true" />{{ c }}</span>
               <span v-if="live && failing" class="rounded-full bg-[var(--bad)] text-white px-3 py-1 text-[12px] shadow"><XMarkIcon class="size-3.5 inline -mt-0.5 me-1" aria-hidden="true" />{{ failing.note || failing.name }}</span>
             </div>
@@ -195,7 +196,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           <div class="tess breathe size-11 rounded-full shrink-0 shadow-md" aria-hidden="true" />
           <div :key="bubble" class="rise flex-1 min-w-0 rounded-2xl rounded-es-sm bg-[var(--bubble)] text-[var(--bubble-fg)] px-5 py-3 shadow-sm max-w-3xl max-h-[28vh] overflow-y-auto" :style="{ boxShadow: bubbleEdge }" aria-live="polite">
             <p class="text-[12px] text-[var(--bubble-muted)] mb-0.5">{{ bubbleLabel }}</p>
-            <p class="display text-[16px] leading-relaxed max-w-[68ch] text-pretty">{{ bubble }}</p>
+            <p class="display selectable text-[16px] leading-relaxed max-w-[68ch] text-pretty">{{ bubble }}</p>
           </div>
         </div>
       </main>
@@ -219,7 +220,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
             </div>
             <TransitionGroup name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.problems" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
             <button
-              v-for="f in g.fixes" :key="f.who?.key ?? '-'" class="mt-1.5 mb-1 self-start text-start rounded-lg bg-white ring-1 ring-[var(--line)] text-[var(--ink)] px-3 py-1.5 text-[13px] font-medium hover:bg-[var(--page)]"
+              v-for="f in g.fixes" :key="f.who?.key ?? '-'" class="mt-1.5 mb-1 self-start text-start rounded-lg bg-[var(--surface)] ring-1 ring-[var(--line)] text-[var(--ink)] px-3 py-1.5 text-[13px] font-medium hover:bg-[var(--page)]"
               @click="openSettings()"
             >
               {{ f.who ? `Sign in as ${shortLabel(f.who.label)} to check ${f.n === 1 ? 'this' : `these ${f.n}`}` : `${f.n} check${plural(f.n)} couldn't run. Fix in Settings` }}
@@ -232,7 +233,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           </div>
           <ul v-if="finished && others.length" class="mt-3 flex flex-col"><CheckRow :item="{ name: OTHER, status: 'pass' }" :label="`Other screenshots (${others.length})`" :finished="finished" :shots="others.length" @pick="pick" /></ul>
         </div>
-        <div v-show="state.rail === 'log'" id="panel-log" role="tabpanel" aria-labelledby="tab-log" class="flex-1 min-h-0 overflow-y-auto bg-[var(--log)] text-[var(--log-fg)] p-4 mono text-[11px] leading-5">
+        <div v-show="state.rail === 'log'" id="panel-log" role="tabpanel" aria-labelledby="tab-log" class="selectable flex-1 min-h-0 overflow-y-auto bg-[var(--log)] text-[var(--log-fg)] p-4 mono text-[11px] leading-5">
           <h2 class="sr-only">Log</h2>
           <p v-for="(s, i) in r.steps" :key="i" :class="s.startsWith('say: ') ? 'text-[var(--log-say)] font-sans text-[13px] my-1' : 'text-[var(--log-fg)]/70 break-all'">{{ s.startsWith('say: ') ? `Tess  ${s.slice(5)}` : `·  ${s.slice(4)}` }}</p>
         </div>

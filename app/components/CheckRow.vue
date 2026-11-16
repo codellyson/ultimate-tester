@@ -31,7 +31,7 @@ const showNote = computed(() => selected.value && props.item.name !== OTHER)
       <span class="flex-1">{{ label ?? item.name }}</span>
       <span v-if="shots > 1" class="text-[12px] text-[var(--muted)] shrink-0">{{ shots }} shots</span>
     </component>
-    <Transition name="reveal"><div v-if="showNote" class="ms-6 mb-2 mt-1 flex flex-col gap-1.5 text-[13px] text-[var(--muted)]">
+    <Transition name="reveal"><div v-if="showNote" class="selectable ms-6 mb-2 mt-1 flex flex-col gap-1.5 text-[13px] text-[var(--muted)]">
       <p v-if="item.note" class="text-[var(--ink)] leading-snug">{{ item.note }}</p>
       <p v-if="details?.expected && item.status !== 'pass'">Expected: {{ details.expected }}</p>
       <p v-if="details?.actual && item.status !== 'pass'">Saw: {{ details.actual }}</p>

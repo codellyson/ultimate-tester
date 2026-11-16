@@ -28,7 +28,7 @@ async function draft() { if (await setupAction('draft')) state.confirmJustDrafte
       <template v-else>
         <TessSays>{{ state.confirmJustDrafted ? `I read ${app.name}. Here's how I'll test it. Fix anything that's wrong; I'll follow this exactly.` : `Here's how I test ${app.name}. Change anything, any time.` }}</TessSays>
         <div class="ms-12 flex flex-col gap-3">
-          <h2 class="text-[13px] font-semibold uppercase tracking-wide text-[var(--muted)]">How I test this app</h2>
+          <h2 class="text-[13px] font-medium text-[var(--muted)]">How I test this app</h2>
           <ProfileCard :profile="s.profile" />
           <button v-if="state.confirmJustDrafted" class="btn-blue self-start" @click="state.confirmJustDrafted = false">Looks right</button>
         </div>
@@ -36,7 +36,7 @@ async function draft() { if (await setupAction('draft')) state.confirmJustDrafte
         <template v-if="!state.confirmJustDrafted">
           <TessSays>{{ needs.length ? `Different people see different things in ${app.name}, so I test as each of these. Sign me in once as the ones that need it, with test accounts, your usual way. I keep each session on this Mac and never see a password.` : `These are the people I test as. Everyone's ready.` }}</TessSays>
           <div class="ms-12 flex flex-col gap-3">
-            <h2 class="text-[13px] font-semibold uppercase tracking-wide text-[var(--muted)]">Who I test as</h2>
+            <h2 class="text-[13px] font-medium text-[var(--muted)]">Who I test as</h2>
             <PersonaList />
           </div>
           <TessSays v-if="!needs.length">

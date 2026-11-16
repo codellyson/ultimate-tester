@@ -31,7 +31,7 @@ async function save() {
 </script>
 
 <template>
-  <div class="max-w-2xl rounded-2xl bg-white surface divide-y divide-[var(--line)]">
+  <div class="max-w-2xl rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)]">
     <template v-if="editing === '*'">
       <div class="p-4"><textarea v-model="draft" class="field mono text-[12px] min-h-96" aria-label="Profile Markdown" /></div>
       <div class="flex gap-2 p-4"><button class="btn-blue" @click="save">Save</button><button class="btn" @click="editing = null">Cancel</button></div>
@@ -39,7 +39,7 @@ async function save() {
     <template v-else>
       <div v-for="row in rows" :key="row.head" class="px-5 py-4 flex gap-4">
         <span class="w-32 shrink-0 text-[var(--muted)]">{{ row.label }}</span>
-        <div class="flex-1 min-w-0 flex flex-col gap-1">
+        <div class="selectable flex-1 min-w-0 flex flex-col gap-1">
           <template v-if="editing === row.head">
             <textarea v-model="draft" class="field mono text-[12px] min-h-28" :aria-label="`Edit ${row.label}`" />
             <div class="flex gap-2"><button class="btn-blue" @click="save">Save</button><button class="btn" @click="editing = null">Cancel</button></div>

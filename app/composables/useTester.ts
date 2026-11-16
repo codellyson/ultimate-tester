@@ -211,6 +211,10 @@ async function boot() {
   const params = new URLSearchParams(location.search)
   state.inSettings = params.get('window') === 'settings'
   const t = tauri()
+  // In the Mac app, right-click never shows WebKit's Reload menu: it is left only where text can be copied.
+  if (t) document.addEventListener('contextmenu', (e) => {
+    if (!(e.target as HTMLElement).closest?.('input, textarea, .selectable, .mono')) e.preventDefault()
+  })
   if (!state.inSettings) {
     t?.event?.listen('menu', (e) => onMenu(e.payload))
     window.addEventListener('focus', () => { unseenProblems = false; announce(state.apps) })
