@@ -155,7 +155,7 @@ async function startTest(t: Target) {
     await api(`/api/apps/${state.appId}/run`, { kind, target, note: state.note })
     state.note = ''
     state.follow = true
-    setTimeout(() => show('run'), 900)
+    if (!state.inSettings) setTimeout(() => show('run'), 900)
   } catch (e) { state.flash = (e as Error).message }
 }
 

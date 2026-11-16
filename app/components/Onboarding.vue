@@ -41,11 +41,6 @@ const needs = computed(() => s.value?.personas.filter((p) => p.signIn && !p.save
 
 // 4 · When to test, then the first test.
 const trigger = ref<'stop' | 'commit' | 'manual'>(s.value?.triggers.commit && !s.value.triggers.stop ? 'commit' : 'stop')
-const WHEN = [
-  { mode: 'stop', title: 'When Claude Code finishes a task', hint: 'If something broke, I tell Claude Code what, and it fixes it before you look.' },
-  { mode: 'commit', title: 'After every commit', hint: 'I test in the background and the result shows up here.' },
-  { mode: 'manual', title: 'Only when I ask', hint: 'From the + menu or ⌘K.' },
-] as const
 const target = ref(0)
 const targets = computed(() => targetsFor(s.value?.remotes).slice(0, 3))
 const starting = ref(false)
@@ -168,12 +163,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
       <!-- 4 · When to test, and the first test -->
       <template v-else-if="step === 4 && s">
         <TessSays>When should I test? I'm most useful when nobody has to remember to ask.</TessSays>
-        <div class="ms-12 rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)] overflow-hidden" role="radiogroup" aria-label="When Tess tests">
-          <label v-for="w in WHEN" :key="w.mode" :class="['flex gap-3 items-start px-5 py-3.5 transition-colors duration-150', trigger === w.mode && 'bg-[var(--accent-soft)]']">
-            <input v-model="trigger" type="radio" name="trigger" :value="w.mode" class="mt-1 accent-[var(--accent)]">
-            <span><b class="font-medium">{{ w.title }}</b><span class="block text-[12px] text-[var(--muted)] mt-0.5">{{ w.hint }}</span></span>
-          </label>
-        </div>
+        <TriggerPicker v-model="trigger" class="ms-12" />
         <TessSays>Let's do a first one now, so you see how it goes. What should I look at?</TessSays>
         <div class="ms-12 flex flex-col gap-3">
           <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="What to test">

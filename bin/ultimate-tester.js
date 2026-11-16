@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, appendFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shouldSkip, VERDICT_SCHEMA, enforceEvidence, renderReport, usageLabel, withPort, parsePersonas, recentRuns } from '../lib.js';
+import { shouldSkip, VERDICT_SCHEMA, enforceEvidence, renderReport, usageLabel, withPort, parsePersonas, recentRuns, withoutOurStopHook } from '../lib.js';
 const PORT = Number(process.env.ULTIMATE_TESTER_PORT ?? 4600);
 import { startBrowser, freePort, useSession } from '../live.js';
 import { sessionFile } from '../actions.js';
@@ -246,21 +246,23 @@ async function setup() {
   await openWindow('&view=setup', true);
 }
 
+// Claude Code reads .claude/settings.local.json too, and it is not committed: the hook points at this
+// Mac's copy of Ultimate Tester, so it must not reach teammates through the repo.
+const CLAUDE_FILES = [join('.claude', 'settings.local.json'), join('.claude', 'settings.json')];
+const readJson = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : {});
+
 // which: "stop" (Claude Code Stop hook), "commit" (post-commit hook), or both when not given.
 function install(which) {
   init();
   const envPrefix = process.env.ULTIMATE_TESTER_TIMEOUT_MS ? `ULTIMATE_TESTER_TIMEOUT_MS=${TIMEOUT_MS} ` : '';
   const cmd = `${envPrefix}node ${JSON.stringify(SELF)}`;
-  const settingsFile = join('.claude', 'settings.json');
   if (which !== 'commit') {
+    uninstall('stop'); // also moves an older hook out of the committed settings.json
     mkdirSync('.claude', { recursive: true });
-    const settings = existsSync(settingsFile) ? JSON.parse(readFileSync(settingsFile, 'utf8')) : {};
-    const stop = (settings.hooks ??= {}).Stop ??= [];
-    if (!JSON.stringify(stop).includes('ultimate-tester')) {
-      stop.push({ hooks: [{ type: 'command', command: `${cmd} hook`, timeout: Math.ceil(TIMEOUT_MS / 1000) + 60 }] });
-      writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
-      console.log(`Added Stop hook to ${settingsFile}`);
-    }
+    const settings = readJson(CLAUDE_FILES[0]);
+    ((settings.hooks ??= {}).Stop ??= []).push({ hooks: [{ type: 'command', command: `${cmd} hook`, timeout: Math.ceil(TIMEOUT_MS / 1000) + 60 }] });
+    writeFileSync(CLAUDE_FILES[0], JSON.stringify(settings, null, 2) + '\n');
+    console.log(`Added Stop hook to ${CLAUDE_FILES[0]}`);
   }
   if (which === 'stop') return;
   const hookFile = join(git('rev-parse', '--git-path', 'hooks'), 'post-commit');
@@ -270,6 +272,25 @@ function install(which) {
     writeFileSync(hookFile, existing + line);
     chmodSync(hookFile, 0o755);
     console.log(`Added background run to ${hookFile}`);
+  }
+}
+
+// Takes Ultimate Tester's hooks out again ("stop", "commit", or both), leaving everyone else's alone.
+function uninstall(which) {
+  process.chdir(root());
+  if (which !== 'commit') {
+    for (const f of CLAUDE_FILES) {
+      if (!existsSync(f)) continue;
+      const before = readJson(f);
+      const after = withoutOurStopHook(before);
+      if (JSON.stringify(after) !== JSON.stringify(before)) { writeFileSync(f, JSON.stringify(after, null, 2) + '\n'); console.log(`Removed Stop hook from ${f}`); }
+    }
+  }
+  if (which === 'stop') return;
+  const hookFile = join(git('rev-parse', '--git-path', 'hooks'), 'post-commit');
+  if (existsSync(hookFile) && readFileSync(hookFile, 'utf8').includes('# ultimate-tester')) {
+    writeFileSync(hookFile, readFileSync(hookFile, 'utf8').split('\n').filter((l) => !l.includes('# ultimate-tester')).join('\n'));
+    console.log(`Removed background run from ${hookFile}`);
   }
 }
 
@@ -313,6 +334,7 @@ switch (cmdName) {
   case 'init': init(); break;
   case 'setup': await setup(); process.exit(0);
   case 'install': install(rest[0]); break;
+  case 'uninstall': uninstall(rest[0]); break;
   default:
     console.log('usage: ultimate-tester <setup | run [--commit [sha] | --range base..head] [--note text] | serve | install | init | hook>');
     process.exit(cmdName ? 1 : 0);

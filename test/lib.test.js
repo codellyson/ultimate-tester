@@ -85,3 +85,12 @@ test('a profile save based on an older copy is refused, so lessons are never ove
   a.saveProfile('## Start\n- Command: y\n', a.status().profileHash);
   rmSync(dir, { recursive: true });
 });
+
+test('removing our Stop hook leaves every other hook alone', async () => {
+  const { withoutOurStopHook } = await import('../lib.js');
+  const ours = { type: 'command', command: 'node "/x/ultimate-tester.js" hook' };
+  const theirs = { type: 'command', command: 'say done' };
+  assert.deepEqual(withoutOurStopHook({ hooks: { Stop: [{ hooks: [ours, theirs] }], PreToolUse: [1] } }), { hooks: { Stop: [{ hooks: [theirs] }], PreToolUse: [1] } });
+  assert.deepEqual(withoutOurStopHook({ model: 'x', hooks: { Stop: [{ hooks: [ours] }] } }), { model: 'x' });
+  assert.deepEqual(withoutOurStopHook({}), {});
+});

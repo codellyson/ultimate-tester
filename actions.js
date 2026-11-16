@@ -70,7 +70,7 @@ export function createActions(root) {
     let hooks = '';
     try { hooks = execFileSync('git', ['rev-parse', '--git-path', 'hooks'], { cwd: root, encoding: 'utf8' }).trim(); } catch {}
     return {
-      stop: read(join(root, '.claude', 'settings.json')).includes('ultimate-tester'),
+      stop: ['settings.local.json', 'settings.json'].some((f) => read(join(root, '.claude', f)).includes('ultimate-tester')),
       commit: !!hooks && read(join(root, hooks, 'post-commit')).includes('# ultimate-tester'),
     };
   };
@@ -203,9 +203,13 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
     },
 
     // mode: "stop" (when Claude Code finishes), "commit" (after every commit) or "manual".
+    // One answer to "when should Tess test?": installs that trigger and removes the other (manual removes both).
     setTrigger(mode) {
       if (!['stop', 'commit', 'manual'].includes(mode)) throw new Error('Choose when Tess should test');
-      if (mode !== 'manual') execFileSync(process.execPath, [CLI, 'install', mode], { cwd: root, env: childEnv(), stdio: 'ignore' });
+      const cli = (...args) => execFileSync(process.execPath, [CLI, ...args], { cwd: root, env: childEnv(), stdio: 'ignore' });
+      if (mode === 'manual') return cli('uninstall');
+      cli('uninstall', mode === 'stop' ? 'commit' : 'stop');
+      cli('install', mode);
     },
 
     finishOnboarding() {

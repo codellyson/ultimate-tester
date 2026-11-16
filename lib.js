@@ -118,3 +118,16 @@ export function setSection(md, head, body) {
   if (i < 0) parts.push(`\n\n${sec}`); else parts[i] = sec;
   return parts.join('').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
 }
+
+// A Claude Code settings object without Ultimate Tester's Stop hook (other hooks untouched).
+export function withoutOurStopHook(settings) {
+  const s = structuredClone(settings ?? {});
+  const stop = s.hooks?.Stop;
+  if (!Array.isArray(stop)) return s;
+  const kept = stop
+    .map((g) => ({ ...g, hooks: (g.hooks ?? []).filter((h) => !String(h.command ?? '').includes('ultimate-tester')) }))
+    .filter((g) => g.hooks.length);
+  if (kept.length) s.hooks.Stop = kept; else delete s.hooks.Stop;
+  if (!Object.keys(s.hooks).length) delete s.hooks;
+  return s;
+}
