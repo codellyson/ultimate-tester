@@ -12,6 +12,7 @@
     "core:window:allow-show",
     "core:window:allow-set-focus",
     "allow-open-settings",
+    "allow-set-menu-state",
     "dialog:allow-open",
     "notification:default",
     "opener:allow-reveal-item-in-dir"

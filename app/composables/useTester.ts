@@ -40,6 +40,7 @@ const state = reactive({
   note: '', // extra instructions for the next test only
   sheet: false, // the "Test a commit or range" sheet
   sidebar: true,
+  roomy: true, // the window is wide enough for the sidebar
   inSettings: false, // this page is the Settings window
   booted: false, // the app list has loaded once; until then nothing renders (no Welcome flash)
 })
@@ -187,6 +188,8 @@ function onMenu(id: string) {
     'commands': () => { state.menu = null; state.cmdk = true },
     'getting-started': () => { if (state.appId) show('onboard') },
   }
+  const recent = id.match(/^recent-(\d)$/)
+  if (recent) { const i = Number(recent[1]) - 1; const r = state.runs[i]; if (r) openRun(r.id, i === 0); return }
   act[id]?.()
 }
 
@@ -220,6 +223,19 @@ async function boot() {
     if (!(e.target as HTMLElement).closest?.('input, textarea, .selectable, .mono')) e.preventDefault()
   })
   if (state.inSettings) t?.event?.listen('settings-app', (e) => { if (e.payload && e.payload !== state.appId) selectApp(e.payload) })
+  if (!state.inSettings && t?.core) {
+    // Keep the menu bar honest: greyed out when a command can't run, latest tests by name.
+    const menuState = computed(() => ({
+      newTest: !!state.appId && state.view !== 'onboard' && !!state.setup?.profileReady && !state.setup?.running,
+      rerun: state.view === 'run' && !!state.detail?.change && !state.setup?.running,
+      stop: !!state.setup?.running,
+      sidebarShown: state.sidebar,
+      sidebarAvailable: state.roomy && (state.view === 'run' || state.view === 'setup'),
+      recent: state.runs.slice(0, 4).map((r) => `${short(r.title)} · ${when(r.id)}`),
+      testing: state.apps.some((a) => a.last?.status === 'running'),
+    }))
+    watch(menuState, (m) => { t.core?.invoke('set_menu_state', m).catch(() => {}) }, { immediate: true })
+  }
   if (!state.inSettings) {
     t?.event?.listen('menu', (e) => onMenu(e.payload))
     window.addEventListener('focus', () => { unseenProblems = false; announce(state.apps) })

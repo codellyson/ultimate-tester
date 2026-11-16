@@ -2,7 +2,7 @@
 import { ArrowPathIcon, ArrowRightIcon, CheckIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/vue/16/solid'
 // A test: the verdict first, then what Tess saw (driven by the selected check), Tess's words, and the checks.
 import type { PlanItem, Persona } from '~/composables/useTester'
-const { state, openSettings } = useTester()
+const { state, openSettings, rerun, tauri } = useTester()
 const r = computed(() => state.detail!)
 const plan = computed(() => state.plan)
 const v = computed(() => r.value.verdict)
@@ -87,12 +87,34 @@ const screen = computed(() => {
   if (finished.value && r.value.shots.length) {
     const shot = mine.value[Math.min(state.sel.shot, mine.value.length - 1)]
     return shot
-      ? { src: shotUrl(shot), alt: `Evidence for: ${what.value}`, label: `Evidence · ${what.value}${mine.value.length > 1 ? ` · ${state.sel.shot + 1} of ${mine.value.length} (← →)` : ''}` }
+      ? { src: shotUrl(shot), file: shot, alt: `Evidence for: ${what.value}`, label: `Evidence · ${what.value}${mine.value.length > 1 ? ` · ${state.sel.shot + 1} of ${mine.value.length} (← →)` : ''}` }
       : { src: null, empty: `Tess didn't take a screenshot for “${what.value}”. Her note is in the checklist.`, label: `Evidence · ${what.value}` }
   }
   if (r.value.live) return { src: `/api/apps/${state.appId}/shots/${r.value.id}/live.jpg?t=${liveTick.value}`, alt: 'Live view of the app being tested', label: `${live.value ? 'Live' : 'Last screen'} · ${r.value.live.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
   return { src: null, empty: live.value ? 'Tess is reading the change. The app shows up here once she opens it.' : 'No screen was recorded for this test.', label: '' }
 })
+// Evidence up close: click or Space for full size; drag it out; right-click to copy or find the file.
+const zoomed = ref(false)
+watch(() => screen.value.src, (src) => { if (!src) zoomed.value = false })
+const shotFile = computed(() => ('file' in screen.value ? (screen.value.file as string) : null))
+async function copyImage() {
+  const blob = await (await fetch(screen.value.src!)).blob()
+  await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
+}
+async function evidenceMenu(e: MouseEvent) {
+  const t = tauri()
+  if (!t?.menu || !screen.value.src) return
+  e.preventDefault()
+  const app = state.apps.find((a) => a.id === state.appId)
+  const path = app && shotFile.value ? `${app.root}/.ultimate-tester/runs/${r.value.id}/${shotFile.value}` : null
+  const m = await t.menu.Menu.new({ items: [
+    { text: zoomed.value ? 'Close' : 'Enlarge', action: () => { zoomed.value = !zoomed.value } },
+    { text: 'Copy Image', enabled: !!shotFile.value?.endsWith('.png'), action: () => { copyImage().catch(() => { state.flash = "Couldn't copy the screenshot." }) } },
+    { text: 'Show in Finder', enabled: !!path && !!t.opener, action: () => { if (path) t.opener?.revealItemInDir(path) } },
+  ] })
+  await m.popup()
+}
+
 // Who she is testing as right now, from her last `as <persona>` command.
 const asWho = computed(() => {
   const last = [...r.value.steps].reverse().find((s) => s.startsWith('do: Bash') && / as [a-z0-9-]+\s*$/.test(s))
@@ -122,14 +144,21 @@ const groups = computed(() => [...new Set(plan.value.map((p) => p.persona ?? '')
   const open = state.unfolded.has(gk) || (finished.value && passed.some((p) => p.name === state.sel.check)) || (!byWho.size && !all.some((x) => x.status === 'fail'))
   return { k, gk, title: k ? label(k) : '', problems: all.filter((p) => p.status !== 'pass'), passed, open, fixes: [...byWho].map(([who, n]) => ({ who, n })), ok: passed.length, total: all.length }
 }))
+// Why checks couldn't run when no sign-in is to blame: Tess's own note on the first one.
+const blockerNote = (g: { problems: PlanItem[] }) => {
+  const p = g.problems.find((x) => x.status === 'unverified' && !blockedBy(x))
+  return p ? (p.note || flows.value.find((f) => f.name === p.name)?.actual || '') : ''
+}
 const toggleFold = (gk: string) => { state.unfolded.has(gk) ? state.unfolded.delete(gk) : state.unfolded.add(gk) }
 const pick = (name: string) => { state.sel = { id: r.value.id, check: name, shot: 0 } }
 
 // ↑ ↓ move between checks and the screen follows; ← → step through a check's screenshots (in reading direction).
 const rail = ref<HTMLElement>()
 function onKey(e: KeyboardEvent) {
+  if (zoomed.value && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); zoomed.value = false; return }
   if (state.view !== 'run' || !finished.value || state.cmdk || state.menu || e.metaKey || e.ctrlKey || e.altKey) return
   if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement as HTMLElement)?.tagName ?? '')) return
+  if (e.key === ' ' && screen.value.src && !(document.activeElement as HTMLElement)?.closest?.('button, a')) { e.preventDefault(); zoomed.value = true; return }
   const rows = [...(rail.value?.querySelectorAll<HTMLButtonElement>('button[data-check]') ?? [])]
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     if (!rows.length) return
@@ -182,7 +211,11 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           <div class="relative flex-1 min-h-0">
             <!-- Evidence crossfades between checks; the live screen swaps in place so it never flickers. -->
             <Transition name="fade">
-              <img v-if="screen.src" :key="live ? 'live' : screen.src" :src="screen.src" :alt="screen.alt" class="absolute inset-0 size-full object-contain object-top">
+              <img
+                v-if="screen.src" :key="live ? 'live' : screen.src" :src="screen.src" :alt="screen.alt" draggable="true"
+                class="absolute inset-0 size-full object-contain object-top cursor-zoom-in" title="Click or press Space to enlarge"
+                @click="zoomed = true" @contextmenu="evidenceMenu"
+              >
               <p v-else key="empty" class="absolute inset-0 grid place-items-center text-[var(--muted)] px-6 text-center">{{ screen.empty }}</p>
             </Transition>
             <div class="absolute end-4 top-4 flex flex-col items-end gap-1.5">
@@ -225,13 +258,21 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
               <span class="shrink-0 text-[var(--muted)]">{{ g.ok }} of {{ g.total }} passed</span>
             </div>
             <TransitionGroup name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.problems" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
-            <button
-              v-for="f in g.fixes" :key="f.who?.key ?? '-'" class="mt-1.5 mb-1 self-stretch flex items-start gap-2 text-start rounded-lg bg-[var(--surface)] ring-1 ring-[var(--line)] text-[var(--ink)] px-3 py-1.5 text-[13px] font-medium hover:bg-[var(--page)]"
-              @click="openSettings()"
-            >
-              <span class="flex-1 text-pretty">{{ f.who ? `Sign in as ${shortLabel(f.who.label)} to check ${f.n === 1 ? 'this' : `these ${f.n}`}` : `${f.n} check${plural(f.n)} couldn't run. Fix in Settings` }}</span>
-              <ArrowRightIcon class="size-4 shrink-0 mt-[3px] rtl:-scale-x-100" aria-hidden="true" />
-            </button>
+            <template v-for="f in g.fixes" :key="f.who?.key ?? '-'">
+              <!-- A missing sign-in is fixed in Settings; anything else gets Tess's own reason and a retry. -->
+              <button
+                v-if="f.who" class="mt-1.5 mb-1 self-stretch flex items-start gap-2 text-start rounded-lg bg-[var(--surface)] ring-1 ring-[var(--line)] text-[var(--ink)] px-3 py-1.5 text-[13px] font-medium hover:bg-[var(--page)]"
+                @click="openSettings()"
+              >
+                <span class="flex-1 text-pretty">Sign in as {{ shortLabel(f.who.label) }} to check {{ f.n === 1 ? 'this' : `these ${f.n}` }}</span>
+                <ArrowRightIcon class="size-4 shrink-0 mt-[3px] rtl:-scale-x-100" aria-hidden="true" />
+              </button>
+              <div v-else class="mt-1.5 mb-1 rounded-lg bg-[var(--surface)] ring-1 ring-[var(--line)] px-3 py-2 flex flex-col gap-1.5">
+                <p class="font-medium">{{ f.n }} check{{ plural(f.n) }} couldn't run</p>
+                <p v-if="blockerNote(g)" class="selectable text-[12px] text-[var(--muted)] text-pretty">{{ blockerNote(g) }}</p>
+                <button class="btn self-start" :disabled="!!state.setup?.running" @click="rerun()">Run again</button>
+              </div>
+            </template>
             <template v-if="g.passed.length">
               <button class="mt-1 py-1 text-start text-[13px] text-[var(--muted)] hover:text-[var(--ink)] flex gap-2" :aria-expanded="g.open" @click="toggleFold(g.gk)"><ChevronDownIcon :class="['size-4 mt-0.5 transition-[rotate] duration-150', g.open && 'rotate-180']" aria-hidden="true" /> {{ g.passed.length }} passed</button>
               <Transition name="reveal"><TransitionGroup v-if="g.open" name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.passed" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup></Transition>
@@ -245,5 +286,12 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
         </div>
       </aside>
     </div>
+    <!-- Full-size evidence: Space or Esc closes, ← → still step through the check's screenshots. -->
+    <Transition name="fade">
+      <div v-if="zoomed && screen.src" class="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center gap-3 p-8" role="dialog" aria-modal="true" :aria-label="screen.alt" @click.self="zoomed = false">
+        <img :src="screen.src" :alt="screen.alt" draggable="true" class="max-w-full min-h-0 flex-1 object-contain rounded-lg shadow-2xl cursor-zoom-out" @click="zoomed = false" @contextmenu="evidenceMenu">
+        <p class="text-[12px] text-white/70">{{ screen.label }} · Space or Esc to close</p>
+      </div>
+    </Transition>
   </section>
 </template>

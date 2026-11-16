@@ -3,6 +3,7 @@
 
 use std::net::TcpStream;
 use std::process::{Child, Command};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -10,6 +11,8 @@ use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 struct Engine(Arc<Mutex<Option<Child>>>);
+// Whether any app has a test running, as the page last reported it.
+struct Testing(AtomicBool);
 
 fn engine_up() -> bool {
     TcpStream::connect_timeout(&"127.0.0.1:4600".parse().unwrap(), Duration::from_millis(300)).is_ok()
@@ -41,13 +44,30 @@ fn watch_engine(slot: Arc<Mutex<Option<Child>>>) {
     });
 }
 
+// Menu items whose state follows the page: what can be done right now, and the latest tests.
+struct MenuHandles {
+    new_test: MenuItem<tauri::Wry>,
+    rerun: MenuItem<tauri::Wry>,
+    stop: MenuItem<tauri::Wry>,
+    sidebar: MenuItem<tauri::Wry>,
+    recent: Vec<MenuItem<tauri::Wry>>,
+}
+
 // The menu bar: every app command lives here, so it can be found without knowing ⌘K.
 // Custom items go to the page as a "menu" event with the item's id; the page does the work.
-fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+fn build_menu(app: &tauri::AppHandle) -> tauri::Result<(Menu<tauri::Wry>, MenuHandles)> {
     let item = |id: &str, text: &str, accel: Option<&str>| MenuItem::with_id(app, id, text, true, accel);
+    let off = |id: &str, text: &str, accel: Option<&str>| MenuItem::with_id(app, id, text, false, accel);
     let sep = || PredefinedMenuItem::separator(app);
     let about = AboutMetadata { comments: Some("Tess tests your app the way a person would, every time it changes.".into()), ..Default::default() };
-    Menu::with_items(app, &[
+    let h = MenuHandles {
+        new_test: off("new-test", "New Test…", Some("CmdOrCtrl+N"))?,
+        rerun: off("rerun", "Run Again", Some("CmdOrCtrl+R"))?,
+        stop: off("stop", "Stop", Some("CmdOrCtrl+."))?,
+        sidebar: item("toggle-sidebar", "Hide Sidebar", Some("Ctrl+CmdOrCtrl+S"))?,
+        recent: (1..=4).map(|i| off(&format!("recent-{i}"), "No test yet", Some(&format!("CmdOrCtrl+{i}")))).collect::<tauri::Result<_>>()?,
+    };
+    let menu = Menu::with_items(app, &[
         &Submenu::with_items(app, "Ultimate Tester", true, &[
             &PredefinedMenuItem::about(app, Some("About Ultimate Tester"), Some(about))?,
             &sep()?,
@@ -62,7 +82,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::quit(app, None)?,
         ])?,
         &Submenu::with_items(app, "File", true, &[
-            &item("new-test", "New Test…", Some("CmdOrCtrl+N"))?,
+            &h.new_test,
             &item("add-app", "Add App…", Some("CmdOrCtrl+O"))?,
             &sep()?,
             &PredefinedMenuItem::close_window(app, None)?,
@@ -76,15 +96,14 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::paste(app, None)?,
             &PredefinedMenuItem::select_all(app, None)?,
         ])?,
-        &Submenu::with_items(app, "Test", true, &[
-            &item("rerun", "Run Again", Some("CmdOrCtrl+R"))?,
-            &item("stop", "Stop", Some("CmdOrCtrl+."))?,
-        ])?,
+        &Submenu::with_items(app, "Test", true, &[&h.rerun, &h.stop])?,
         &Submenu::with_items(app, "View", true, &[
-            &item("toggle-sidebar", "Toggle Sidebar", Some("Ctrl+CmdOrCtrl+S"))?,
+            &h.sidebar,
             &sep()?,
             &item("show-checks", "Checks", Some("Alt+CmdOrCtrl+1"))?,
             &item("show-log", "Log", Some("Alt+CmdOrCtrl+2"))?,
+            &sep()?,
+            &h.recent[0], &h.recent[1], &h.recent[2], &h.recent[3],
             &sep()?,
             &item("commands", "Commands…", Some("CmdOrCtrl+K"))?,
             &sep()?,
@@ -97,7 +116,26 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &Submenu::with_items(app, "Help", true, &[
             &item("getting-started", "Getting Started", None)?,
         ])?,
-    ])
+    ])?;
+    Ok((menu, h))
+}
+
+// The page reports what can be done right now; unavailable commands are greyed out, as on any Mac app.
+#[tauri::command]
+fn set_menu_state(app: tauri::AppHandle, new_test: bool, rerun: bool, stop: bool, sidebar_shown: bool, sidebar_available: bool, recent: Vec<String>, testing: bool) {
+    app.state::<Testing>().0.store(testing, Ordering::Relaxed);
+    let Some(h) = app.try_state::<MenuHandles>() else { return };
+    let _ = h.new_test.set_enabled(new_test);
+    let _ = h.rerun.set_enabled(rerun);
+    let _ = h.stop.set_enabled(stop);
+    let _ = h.sidebar.set_text(if sidebar_shown { "Hide Sidebar" } else { "Show Sidebar" });
+    let _ = h.sidebar.set_enabled(sidebar_available);
+    for (i, it) in h.recent.iter().enumerate() {
+        match recent.get(i) {
+            Some(title) => { let _ = it.set_text(title); let _ = it.set_enabled(true); }
+            None => { let _ = it.set_text(if i == 0 { "No test yet" } else { "—" }); let _ = it.set_enabled(false); }
+        }
+    }
 }
 
 // Settings is its own window (⌘,). It is built hidden at launch, so its page is loaded before
@@ -144,12 +182,15 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Engine(slot))
-        .invoke_handler(tauri::generate_handler![open_settings])
+        .manage(Testing(AtomicBool::new(false)))
+        .invoke_handler(tauri::generate_handler![open_settings, set_menu_state])
         .setup(|app| {
+            let (menu, handles) = build_menu(app.handle())?;
+            app.set_menu(menu)?;
+            app.manage(handles);
             build_settings(app.handle())?;
             Ok(())
         })
-        .menu(build_menu)
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
             // Menu commands act on the main window, so bring it back if it was closed.
@@ -169,6 +210,18 @@ fn main() {
         .expect("failed to start Ultimate Tester")
         .run(|app, event| match event {
             RunEvent::Reopen { .. } => show_main(app),
+            // Quitting (⌘Q) mid-test: say what happens rather than quit silently. Tests run on their own,
+            // so they finish anyway; only the window and its notifications go away.
+            RunEvent::ExitRequested { api, code: None, .. } if app.state::<Testing>().0.load(Ordering::Relaxed) => {
+                use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+                api.prevent_exit();
+                let handle = app.clone();
+                app.dialog()
+                    .message("Tess is still testing. If you quit, the test finishes in the background and its result is here next time you open Ultimate Tester, but you won't get a notification.")
+                    .title("Quit while Tess is testing?")
+                    .buttons(MessageDialogButtons::OkCancelCustom("Quit".into(), "Keep Open".into()))
+                    .show(move |quit| if quit { handle.exit(0) });
+            }
             RunEvent::Exit => {
                 if let Some(mut child) = app.state::<Engine>().0.lock().unwrap().take() {
                     let _ = child.kill();

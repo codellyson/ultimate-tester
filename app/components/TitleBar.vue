@@ -26,6 +26,7 @@ watch(() => state.menu, (m, prev) => nextTick(() => {
 }))
 function menuKey(e: KeyboardEvent) {
   if (e.key === 'Escape') { const m = state.menu; state.menu = null; if (m) nextTick(() => triggers[m]?.value?.focus()); return }
+  if ((e.target as HTMLElement).tagName === 'TEXTAREA') return // arrows move the caret in the note
   const items = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[role=menuitem]:not(:disabled)')]
   if (!items.length || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
   e.preventDefault()
@@ -114,14 +115,15 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
     </div></Transition>
 
     <Transition name="pop"><div v-if="state.menu === 'new'" data-menu="new" role="dialog" aria-label="New test" class="origin-top-right absolute top-10 z-30 w-80 rounded-xl bg-[var(--surface)] surface-float p-1.5" :style="{ left: `${Math.max(8, left - 320)}px` }" @click.stop @keydown="menuKey">
-      <label class="block px-3 pt-2 pb-2">
-        <span class="text-[12px] font-medium text-[var(--muted)]">Note for this test <span class="font-normal">(optional)</span></span>
-        <textarea v-model="state.note" maxlength="1000" rows="2" class="field mt-1.5 resize-none" placeholder="e.g. Focus on checkout with a discount code" />
-      </label>
-      <p class="px-3 pt-1 pb-1 text-[12px] font-medium text-[var(--muted)]">What should Tess test?</p>
-      <button v-for="t in [...targetsFor(state.setup?.remotes), { kind: 'custom', label: 'Something else…', hint: 'a commit or range' }]" :key="t.label" class="menu-item" :disabled="disabledNew" @click="startTest(t)">
+      <p class="px-3 pt-2 pb-1 text-[12px] font-medium text-[var(--muted)]">What should Tess test?</p>
+      <button v-for="t in [...targetsFor(state.setup?.remotes), { kind: 'custom', label: 'Something else…', hint: 'a commit or range' }]" :key="t.label" role="menuitem" class="menu-item" :disabled="disabledNew" @click="startTest(t)">
         <span class="flex-1 whitespace-nowrap">{{ t.label }}</span><span class="text-[12px] text-[var(--muted)] text-end">{{ t.hint }}</span>
       </button>
+      <div class="my-1 border-t border-[var(--line)]" />
+      <label class="block px-3 pt-1 pb-2">
+        <span class="text-[12px] font-medium text-[var(--muted)]">Note for this test <span class="font-normal">(optional, ⌘↩ tests your changes)</span></span>
+        <textarea v-model="state.note" maxlength="1000" rows="2" class="field mt-1.5 resize-none" placeholder="e.g. Focus on checkout with a discount code" @keydown.meta.enter.prevent="!disabledNew && startTest({ kind: 'changes' })" />
+      </label>
     </div></Transition>
   </header>
   <Transition name="reveal"><p v-if="state.flash" class="px-5 py-2 text-[12px] bg-[var(--bad-soft)] text-[var(--bad)] border-b border-[var(--line)] flex gap-3" role="alert">
