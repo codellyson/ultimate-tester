@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the engine page may do in the main and Settings windows: folder picker, notifications, Dock badge, Reveal in Finder, opening Settings, and window basics.",
+  "description": "What the engine page may do in the main and Settings windows: folder picker, notifications, Dock badge, Reveal in Finder, and window basics.",
   "windows": ["main", "settings"],
   "remote": { "urls": ["http://localhost:4600/*"] },
   "permissions": [
@@ -11,7 +11,7 @@
     "core:window:allow-set-badge-label",
     "core:window:allow-show",
     "core:window:allow-set-focus",
-    "core:webview:allow-create-webview-window",
+    "allow-open-settings",
     "dialog:allow-open",
     "notification:default",
     "opener:allow-reveal-item-in-dir"

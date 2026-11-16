@@ -52,6 +52,7 @@ type Tauri = {
   menu?: { Menu: { new: (o: { items: { text: string, action?: () => void, enabled?: boolean }[] }) => Promise<{ popup: () => Promise<void> }> }, PredefinedMenuItem: unknown }
   opener?: { revealItemInDir: (path: string) => Promise<void> }
   window?: { getCurrentWindow: () => { setBadgeLabel: (l?: string) => Promise<void>, listen: (n: string, cb: () => void) => Promise<unknown> } }
+  core?: { invoke: (cmd: string, args?: object) => Promise<unknown> }
   webviewWindow?: { WebviewWindow: { getByLabel: (l: string) => Promise<{ show: () => Promise<void>, setFocus: () => Promise<void> } | null> } & (new (label: string, o: object) => unknown) }
 }
 export const tauri = () => (globalThis as unknown as { __TAURI__?: Tauri }).__TAURI__
@@ -161,14 +162,9 @@ async function stopTest() {
 // Settings is its own window in the Mac app (⌘,); in a browser it is the Setup page.
 async function openSettings() {
   state.menu = null
-  const W = tauri()?.webviewWindow?.WebviewWindow
-  if (!W || !state.appId) return show('setup')
-  const open = await W.getByLabel('settings')
-  if (open) { await open.show(); await open.setFocus(); return }
-  new W('settings', {
-    url: `${location.origin}/?app=${state.appId}&view=setup&window=settings`, title: 'Settings',
-    width: 820, height: 720, minWidth: 640, minHeight: 480, titleBarStyle: 'overlay', hiddenTitle: true, trafficLightPosition: { x: 16, y: 24 },
-  })
+  const invoke = tauri()?.core?.invoke
+  if (!invoke || !state.appId) return show('setup')
+  try { await invoke('open_settings', { appId: state.appId }) } catch (e) { state.flash = String(e) }
 }
 
 function onMenu(id: string) {
@@ -215,6 +211,7 @@ async function boot() {
   if (t) document.addEventListener('contextmenu', (e) => {
     if (!(e.target as HTMLElement).closest?.('input, textarea, .selectable, .mono')) e.preventDefault()
   })
+  if (state.inSettings) t?.event?.listen('settings-app', (e) => { if (e.payload && e.payload !== state.appId) selectApp(e.payload) })
   if (!state.inSettings) {
     t?.event?.listen('menu', (e) => onMenu(e.payload))
     window.addEventListener('focus', () => { unseenProblems = false; announce(state.apps) })

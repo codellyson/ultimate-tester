@@ -100,6 +100,34 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     ])
 }
 
+// Settings is its own window (⌘,). It is built hidden at launch, so its page is loaded before
+// anyone opens it (a window created later sometimes came up blank); closing it only hides it.
+fn build_settings(app: &tauri::AppHandle) -> tauri::Result<()> {
+    tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html?view=setup&window=settings".into()))
+        .title("Settings")
+        .inner_size(820.0, 720.0)
+        .min_inner_size(640.0, 480.0)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .traffic_light_position(tauri::LogicalPosition::new(16.0, 24.0))
+        .visible(false)
+        .build()
+        .map(|_| ())
+}
+
+#[tauri::command]
+async fn open_settings(app: tauri::AppHandle, app_id: String) -> Result<(), String> {
+    if app.get_webview_window("settings").is_none() {
+        build_settings(&app).map_err(|e| e.to_string())?;
+    }
+    let w = app.get_webview_window("settings").ok_or("Settings window missing")?;
+    // The Settings page switches to the app the main window is showing.
+    let _ = app.emit_to("settings", "settings-app", app_id);
+    let _ = w.show();
+    let _ = w.set_focus();
+    Ok(())
+}
+
 fn show_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -116,6 +144,11 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Engine(slot))
+        .invoke_handler(tauri::generate_handler![open_settings])
+        .setup(|app| {
+            build_settings(app.handle())?;
+            Ok(())
+        })
         .menu(build_menu)
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
@@ -124,9 +157,9 @@ fn main() {
             let _ = app.emit_to("main", "menu", id.to_string());
         })
         .on_window_event(|window, event| {
-            // Closing the main window hides it: tests keep running and results still arrive.
+            // Closing a window hides it: tests keep running, results still arrive, Settings stays loaded.
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
+                if window.label() == "main" || window.label() == "settings" {
                     api.prevent_close();
                     let _ = window.hide();
                 }

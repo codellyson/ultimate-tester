@@ -2,7 +2,7 @@
 import { CheckIcon, PlusIcon } from '@heroicons/vue/16/solid'
 import { CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon } from '@heroicons/vue/20/solid'
 // First run for an app: welcome, Tess reads the repo, you check her plan, sign her in, choose when she tests, first test.
-const { state, api, addApp, addSample, setupAction, startTest, show } = useTester()
+const { state, api, addApp, addSample, setupAction, startTest, show, selectApp } = useTester()
 const s = computed(() => state.setup)
 const app = computed(() => state.apps.find((a) => a.id === state.appId))
 const STEPS = ['Welcome', 'Read the app', 'Check the plan', 'Sign in', 'First test']
@@ -73,7 +73,9 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
           </span>
         </li>
       </ol>
-      <button v-if="state.appId && step > 1" class="link text-[12px] shrink-0" @click="skip">Skip setup</button>
+      <!-- Reopened from Help ▸ Getting Started on an app that is set up: just go back. -->
+      <button v-if="state.appId && s?.onboarded" class="link text-[12px] shrink-0" @click="selectApp(state.appId!)">Back to tests</button>
+      <button v-else-if="state.appId && step > 1" class="link text-[12px] shrink-0" @click="skip">Skip setup</button>
     </nav>
 
     <Transition name="step" mode="out-in">

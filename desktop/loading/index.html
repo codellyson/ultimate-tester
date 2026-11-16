@@ -16,7 +16,7 @@
     // The engine is a local Node server the app starts; open it as soon as it answers.
     (async function wait(tries = 0) {
       // no-cors: this page is another origin, so it can only learn that the engine answered, which is enough.
-      try { await fetch('http://localhost:4600/health', { mode: 'no-cors' }); location.replace('http://localhost:4600/'); return; } catch {}
+      try { await fetch('http://localhost:4600/health', { mode: 'no-cors' }); location.replace('http://localhost:4600/' + location.search); return; } catch {}
       // Quiet for the usual second or two; words only if it is slow, then a way forward if it never comes.
       if (tries === 6) document.getElementById('msg').textContent = 'Starting Tess…';
       if (tries === 60) document.getElementById('msg').innerHTML = 'Tess needs Node.js 20 or newer to run.<br>Install it from nodejs.org, then open Ultimate Tester again.';
