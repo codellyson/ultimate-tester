@@ -2,7 +2,7 @@
 import { CheckIcon } from '@heroicons/vue/16/solid'
 // The profile Markdown as a readable card: one row per section, each editable in place.
 const props = defineProps<{ profile: string, basic?: boolean }>()
-const { setupAction } = useTester()
+const { state, setupAction } = useTester()
 const LABELS: [string, string][] = [['Start', 'Start the app'], ['Allowed URLs', 'Where I may go'], ['Test accounts', 'Signs in as'], ['Personas', 'Personas'], ['Must never break', 'Must never break'], ['Existing checks', 'Tests to run'], ['Notes for Tess', 'Always keep in mind'], ['Lessons', "What you've taught me"]]
 // Shown even when missing, so there is always a place to tell Tess things.
 const ALWAYS = new Set(['Notes for Tess', 'Lessons'])
@@ -26,7 +26,7 @@ const draft = ref('')
 function edit(head: string) { editing.value = head; draft.value = head === '*' ? props.profile : sections.value[head] ?? '- ' }
 async function save() {
   const text = editing.value === '*' ? draft.value : replaceSection(editing.value!, draft.value)
-  if (await setupAction('profile', { text })) editing.value = null
+  if (await setupAction('profile', { text, base: state.setup?.profileHash })) editing.value = null
 }
 </script>
 

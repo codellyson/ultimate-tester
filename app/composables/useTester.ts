@@ -12,7 +12,7 @@ export type RunDetail = RunInfo & {
 }
 export type Persona = { key: string, label: string, signIn: boolean, savedAt: string | null }
 export type Setup = {
-  profile: string, profileReady: boolean, onboarded: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
+  profile: string, profileHash: string, profileReady: boolean, onboarded: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
   personas: Persona[], allSignedIn: boolean, signingIn: string | null, running: boolean,
   job: { kind: string | null, status: string, message: string, steps: string[] }
 }
@@ -207,7 +207,11 @@ async function addSample() {
 }
 
 async function setupAction(path: string, body: unknown = {}) {
-  try { state.setup = await api<Setup>(`/api/apps/${state.appId}/${path}`, body); return true } catch (e) { state.flash = (e as Error).message; return false }
+  try { state.setup = await api<Setup>(`/api/apps/${state.appId}/${path}`, body); return true } catch (e) {
+    state.flash = (e as Error).message
+    refresh() // show what is really on disk now (e.g. after a refused, out-of-date save)
+    return false
+  }
 }
 
 let started = false
@@ -222,7 +226,11 @@ async function boot() {
   if (t) document.addEventListener('contextmenu', (e) => {
     if (!(e.target as HTMLElement).closest?.('input, textarea, .selectable, .mono')) e.preventDefault()
   })
-  if (state.inSettings) t?.event?.listen('settings-app', (e) => { if (e.payload && e.payload !== state.appId) selectApp(e.payload) })
+  if (state.inSettings) {
+    // Settings stays loaded while hidden, so it re-reads the profile every time it is shown or focused.
+    t?.event?.listen('settings-app', (e) => { if (e.payload && e.payload !== state.appId) selectApp(e.payload); else refresh() })
+    window.addEventListener('focus', () => refresh())
+  }
   if (!state.inSettings && t?.core) {
     // Keep the menu bar honest: greyed out when a command can't run, latest tests by name.
     const menuState = computed(() => ({

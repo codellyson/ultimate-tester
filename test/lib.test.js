@@ -70,3 +70,18 @@ test('a section body is replaced, or added when missing', async () => {
   assert.equal(setSection('## A\n- a\n\n## B\n- b\n', 'A', '- new'), '## A\n- new\n\n## B\n- b\n');
   assert.equal(setSection('## A\n- a\n', 'Notes for Tess', '- x'), '## A\n- a\n\n## Notes for Tess\n- x\n');
 });
+
+test('a profile save based on an older copy is refused, so lessons are never overwritten', async () => {
+  const { createActions } = await import('../actions.js');
+  const { mkdtempSync, writeFileSync, rmSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const dir = mkdtempSync(`${tmpdir()}/ut-`);
+  writeFileSync(`${dir}/.ultimate-tester.md`, '## Start\n- Command: x\n');
+  const a = createActions(dir);
+  const seen = a.status().profileHash;
+  a.addLesson('Empty cart is expected', 'Checkout');
+  assert.throws(() => a.saveProfile('## Start\n- Command: y\n', seen), /changed while you were editing/);
+  assert.match(readFileSync(`${dir}/.ultimate-tester.md`, 'utf8'), /Empty cart is expected/);
+  a.saveProfile('## Start\n- Command: y\n', a.status().profileHash);
+  rmSync(dir, { recursive: true });
+});

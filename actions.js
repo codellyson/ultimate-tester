@@ -1,5 +1,6 @@
 // What the window's Setup screen and run buttons can do, for one repo.
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,6 +75,8 @@ export function createActions(root) {
       return {
         profile,
         profileReady,
+        // Which version of the profile this page is showing; a save based on an older one is refused.
+        profileHash: createHash('sha1').update(profile).digest('hex'),
         // Apps set up before onboarding existed count as onboarded once they have a test.
         onboarded: existsSync(join(state, 'onboarded')) || (profileReady && hasRuns),
         triggers: triggers(),
@@ -89,8 +92,14 @@ export function createActions(root) {
       };
     },
 
-    saveProfile(text) {
+    // base: the profileHash the page was showing. If the file changed since (a lesson, a note, the other
+    // window), the save is refused instead of quietly overwriting it.
+    saveProfile(text, base) {
       if (typeof text !== 'string' || !text.trim() || text.length > 100_000) throw new Error('Profile is empty or too long');
+      const now = existsSync(profileFile) ? readFileSync(profileFile, 'utf8') : '';
+      if (base && base !== createHash('sha1').update(now).digest('hex')) {
+        throw new Error('The profile changed while you were editing (something Tess learned, or another window). Showing the latest; make your edit again.');
+      }
       writeFileSync(profileFile, text.trimEnd() + '\n');
     },
 

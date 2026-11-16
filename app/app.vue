@@ -26,6 +26,11 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); document.r
   <div class="h-full flex flex-col overflow-hidden">
     <SettingsBar v-if="state.inSettings" />
     <TitleBar v-else />
+    <!-- Errors show under whichever bar this window has (main or Settings). -->
+    <Transition name="reveal"><p v-if="state.flash" class="px-5 py-2 text-[12px] bg-[var(--bad-soft)] text-[var(--bad)] border-b border-[var(--line)] flex gap-3" role="alert">
+    <span class="flex-1">{{ state.flash }}</span>
+    <button class="link text-[12px]" @click="state.flash = ''">Dismiss</button>
+  </p></Transition>
     <div class="flex-1 min-h-0 flex">
     <Sidebar v-if="showSidebar" />
     <Transition name="view" mode="out-in">
