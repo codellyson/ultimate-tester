@@ -104,8 +104,11 @@ const chips = computed(() => (live.value ? r.value.steps.map(chipText).filter((c
 const failing = computed(() => plan.value.find((p) => p.status === 'fail'))
 
 const says = computed(() => r.value.steps.filter((s) => s.startsWith('say: ')).map((s) => s.slice(5)))
-const bubble = computed(() => (v.value ? v.value.summary : says.value.at(-1) ?? 'Reading the change…'))
-const bubbleLabel = computed(() => (v.value ? 'Tess · verdict' : fail.value ? 'Tess · caught one' : live.value ? 'Tess · testing' : 'Tess'))
+// The headline is the verdict; the bubble is Tess explaining it. A verdict phrase opening her summary is
+// dropped, so the two can never disagree ("4 checks still need a look" above, "Safe to push." below).
+const VERDICT_LEAD = /^\s*(safe to push|don['’]t push yet|not safe yet|can['’]t say yet)[^.!?:]*[.!?:]\s*/i
+const bubble = computed(() => (v.value ? v.value.summary.replace(VERDICT_LEAD, '').replace(/^\p{Ll}/u, (c) => c.toUpperCase()) || v.value.summary : says.value.at(-1) ?? 'Reading the change…'))
+const bubbleLabel = computed(() => (v.value ? 'Tess · what I found' : fail.value ? 'Tess · caught one' : live.value ? 'Tess · testing' : 'Tess'))
 const bubbleEdge = computed(() => (v.value && v.value.status !== 'pass' ? `inset 3px 0 0 ${v.value.status === 'fail' ? 'var(--bad)' : 'var(--warn)'}` : ''))
 
 // Checks, by who Tess tested as: problems first with their one fix, passes folded.
@@ -194,9 +197,12 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
         <!-- Tess speaks under the screen, never over the evidence. -->
         <div class="shrink-0 flex items-end gap-3">
           <div class="tess breathe size-11 rounded-full shrink-0 shadow-md" aria-hidden="true" />
-          <div :key="bubble" class="rise flex-1 min-w-0 rounded-2xl rounded-es-sm bg-[var(--bubble)] text-[var(--bubble-fg)] px-5 py-3 shadow-sm max-w-3xl max-h-[28vh] overflow-y-auto" :style="{ boxShadow: bubbleEdge }" aria-live="polite">
-            <p class="text-[12px] text-[var(--bubble-muted)] mb-0.5">{{ bubbleLabel }}</p>
-            <p class="display selectable text-[16px] leading-relaxed max-w-[68ch] text-pretty">{{ bubble }}</p>
+          <!-- One stable live region (so screen readers hear each new line); only its content re-animates. -->
+          <div class="flex-1 min-w-0 rounded-2xl rounded-es-sm bg-[var(--bubble)] text-[var(--bubble-fg)] px-5 py-3 shadow-sm max-w-3xl max-h-[28vh] overflow-y-auto" :style="{ boxShadow: bubbleEdge }" aria-live="polite">
+            <div :key="bubble" class="rise">
+              <p class="text-[12px] text-[var(--bubble-muted)] mb-0.5">{{ bubbleLabel }}</p>
+              <p class="display selectable text-[16px] leading-relaxed max-w-[68ch] text-pretty">{{ bubble }}</p>
+            </div>
           </div>
         </div>
       </main>
