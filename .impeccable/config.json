@@ -1,0 +1,35 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "nested-cards",
+        "value": "*",
+        "files": [
+          "/Users/lukmanisiaka/Desktop/workfolder/personal-projects/ultimate-tester/mock-v3.html"
+        ],
+        "createdAt": "2026-11-16T05:00:47.454Z",
+        "reason": "Claude: outer box is a simulated Mac window frame in a throwaway mock, not a card"
+      },
+      {
+        "rule": "nested-cards",
+        "value": "*",
+        "files": [
+          "/Users/lukmanisiaka/Desktop/workfolder/personal-projects/ultimate-tester/mock-v4.html"
+        ],
+        "createdAt": "2026-11-16T05:06:21.752Z",
+        "reason": "Claude: outer box is a simulated Mac window frame in a throwaway mock, not a card"
+      },
+      {
+        "rule": "nested-cards",
+        "value": "*",
+        "files": [
+          "/Users/lukmanisiaka/Desktop/workfolder/personal-projects/ultimate-tester/mock-palettes.html"
+        ],
+        "createdAt": "2026-11-16T05:08:30.819Z",
+        "reason": "Claude: outer box is a simulated Mac window frame in a throwaway mock, not a card"
+      }
+    ]
+  }
+}
