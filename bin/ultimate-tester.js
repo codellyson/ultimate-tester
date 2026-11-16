@@ -169,7 +169,7 @@ async function run({ commit = null, range = null, dedupe = false, note = '' } = 
   const past = existsSync(runsRoot) ? readdirSync(runsRoot).sort().reverse().map((d) => { try { return JSON.parse(readFileSync(join(runsRoot, d, 'verdict.json'), 'utf8')); } catch { return null; } }) : [];
   const runDir = join(runsRoot, new Date().toISOString().replace(/[:.]/g, '-'));
   mkdirSync(runDir, { recursive: true });
-  writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: change.mode, message: change.message, files: change.files, note }));
+  writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: change.mode, message: change.message, files: change.files, note, kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit ?? null }));
   const port = await freePort();
   const prompt = readFileSync(join(HOME, 'prompt.md'), 'utf8')
     .replace('{{PROFILE}}', () => withPort(readFileSync(PROFILE, 'utf8'), port))

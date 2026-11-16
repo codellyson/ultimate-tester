@@ -2,7 +2,7 @@
 import { ArrowPathIcon, ArrowRightIcon, CheckIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/vue/16/solid'
 // A test: the verdict first, then what Tess saw (driven by the selected check), Tess's words, and the checks.
 import type { PlanItem, Persona } from '~/composables/useTester'
-const { state, show } = useTester()
+const { state, openSettings } = useTester()
 const r = computed(() => state.detail!)
 const plan = computed(() => state.plan)
 const v = computed(() => r.value.verdict)
@@ -220,9 +220,9 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
             <TransitionGroup name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.problems" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
             <button
               v-for="f in g.fixes" :key="f.who?.key ?? '-'" class="mt-1.5 mb-1 self-start text-start rounded-lg bg-white ring-1 ring-[var(--line)] text-[var(--ink)] px-3 py-1.5 text-[13px] font-medium hover:bg-[var(--page)]"
-              @click="show('setup')"
+              @click="openSettings()"
             >
-              {{ f.who ? `Sign in as ${shortLabel(f.who.label)} to check ${f.n === 1 ? 'this' : `these ${f.n}`}` : `${f.n} check${plural(f.n)} couldn't run. Fix in Setup` }}
+              {{ f.who ? `Sign in as ${shortLabel(f.who.label)} to check ${f.n === 1 ? 'this' : `these ${f.n}`}` : `${f.n} check${plural(f.n)} couldn't run. Fix in Settings` }}
               <ArrowRightIcon class="size-4 inline -mt-0.5 rtl:-scale-x-100" aria-hidden="true" />
             </button>
             <template v-if="g.passed.length">

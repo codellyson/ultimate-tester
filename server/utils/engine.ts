@@ -21,7 +21,20 @@ export function runInfo(root: string, id: string) {
   // No verdict and nothing written for 10 minutes: the run was stopped, not still going.
   const log = join(dir, 'live.log')
   const quiet = Date.now() - statSync(existsSync(log) ? log : dir).mtimeMs > 10 * 60_000
-  return { id, status: v?.status ?? (quiet ? 'stopped' : 'running'), summary: v?.summary ?? '', title: c?.message?.split('\n')[0] ?? '' }
+  const stopped = existsSync(join(dir, 'stopped'))
+  return { id, status: v?.status ?? (stopped || quiet ? 'stopped' : 'running'), summary: v?.summary ?? '', title: runTitle(c) }
+}
+
+// A run is named by its commit message; uncommitted changes and message-less runs by what they touched.
+function runTitle(c?: { message?: string, files?: string[] }) {
+  const first = c?.message?.split('\n')[0] ?? ''
+  return (first && first !== '(not committed yet)' ? first : filesTitle(c?.files)) || first
+}
+
+function filesTitle(files?: string[]) {
+  if (!files?.length) return ''
+  const name = files[0]!.split('/').pop()
+  return files.length === 1 ? `Changed ${name}` : `Changed ${name} and ${files.length - 1} more`
 }
 
 // Median of recent finished runs, for the "~N min left" estimate.

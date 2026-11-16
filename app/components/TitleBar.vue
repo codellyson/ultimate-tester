@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ChevronDownIcon, PlusIcon } from '@heroicons/vue/16/solid'
 // One bar: which app / which test (both are menus), connection trouble, New test and ⌘K.
-const { state, selectApp, openRun, startTest, addApp, show } = useTester()
+const { state, selectApp, openRun, startTest, addApp, openSettings } = useTester()
 const app = computed(() => state.apps.find((a) => a.id === state.appId))
 const run = computed(() => state.runs.find((r) => r.id === state.runId))
 const runBtn = ref<HTMLElement>()
@@ -73,7 +73,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
         <span v-if="appHint(a)" :class="['text-[12px]', appHint(a)!.cls]">{{ appHint(a)!.text }}</span>
       </button>
       <div class="my-1 border-t border-[var(--line)]" />
-      <button class="menu-item text-[var(--muted)]" @click="state.menu = null; show('setup')">Setup: how Tess tests {{ app?.name }}</button>
+      <button class="menu-item text-[var(--muted)]" @click="openSettings()"><span class="flex-1">Settings for {{ app?.name }}…</span><kbd class="text-[11px] font-sans">⌘,</kbd></button>
       <button class="menu-item text-[var(--muted)]" @click="addApp()"><PlusIcon class="size-4" aria-hidden="true" />Add an app…</button>
     </div></Transition>
 

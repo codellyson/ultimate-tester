@@ -199,6 +199,15 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
       writeFileSync(profileFile, addToSection(readFileSync(profileFile, 'utf8'), 'Lessons', c ? `${c}: ${t}` : t));
     },
 
+    // Stops the test started from this window: the whole process group (Tess, her browser, the app she started).
+    stopRun() {
+      if (!run) throw new Error('No test started from here is running');
+      try { process.kill(-run.pid, 'SIGTERM'); } catch {}
+      const runs = join(state, 'runs');
+      const latest = existsSync(runs) ? readdirSync(runs).sort().at(-1) : null;
+      if (latest) writeFileSync(join(runs, latest, 'stopped'), new Date().toISOString());
+    },
+
     // kind: "changes" | "commit" | "range"; target: sha or base..head; note: extra instructions for this run only.
     startRun(kind, target, note) {
       if (typeof note === 'string' && note.length > 1000) throw new Error('Keep the note under 1000 characters');

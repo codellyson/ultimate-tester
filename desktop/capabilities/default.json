@@ -1,8 +1,19 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The engine page may open the native folder picker and drag the window by its title bar; nothing else.",
-  "windows": ["main"],
+  "description": "What the engine page may do in the main and Settings windows: folder picker, notifications, Dock badge, Reveal in Finder, opening Settings, and window basics.",
+  "windows": ["main", "settings"],
   "remote": { "urls": ["http://localhost:4600/*"] },
-  "permissions": ["core:default", "core:window:allow-start-dragging", "core:window:allow-internal-toggle-maximize", "dialog:allow-open"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-set-badge-label",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:webview:allow-create-webview-window",
+    "dialog:allow-open",
+    "notification:default",
+    "opener:allow-reveal-item-in-dir"
+  ]
 }
