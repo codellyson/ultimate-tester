@@ -26,7 +26,7 @@ const showNote = computed(() => selected.value && props.item.name !== OTHER)
       :class="['w-full text-start py-1.5 px-2 -mx-2 flex gap-2 rounded-lg', selected ? 'bg-[var(--sand)]' : canSelect && 'hover:bg-[var(--sand)]/60', tone]"
       @click="canSelect && $emit('pick', item.name)"
     >
-      <span :class="['w-4 shrink-0 text-center', st.cls]" aria-hidden="true">{{ st.icon }}</span>
+      <component :is="st.icon" :class="['size-4 shrink-0 mt-px', st.cls]" aria-hidden="true" />
       <span class="sr-only">{{ st.word }}: </span>
       <span class="flex-1">{{ label ?? item.name }}</span>
       <span v-if="shots > 1" class="text-[12px] text-[var(--muted)] shrink-0">{{ shots }} shots</span>

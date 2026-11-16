@@ -1,12 +1,16 @@
+import { markRaw, type Component } from 'vue'
+import { ArrowPathIcon, CheckCircleIcon, ClockIcon, QuestionMarkCircleIcon, StopCircleIcon, XCircleIcon } from '@heroicons/vue/20/solid'
+
 export type Status = 'pass' | 'fail' | 'unverified' | 'running' | 'pending' | 'stopped'
 
-export const STATUS: Record<string, { icon: string, cls: string, word: string }> = {
-  pass: { icon: '✓', cls: 'text-[var(--ok)]', word: 'passed' },
-  fail: { icon: '✕', cls: 'text-[var(--bad)]', word: 'broke' },
-  unverified: { icon: '?', cls: 'text-[var(--warn)]', word: "can't check" },
-  running: { icon: '◐', cls: 'text-[var(--accent)] pulse', word: 'testing now' },
-  pending: { icon: '○', cls: 'text-[var(--muted)]', word: 'to go' },
-  stopped: { icon: '■', cls: 'text-[var(--muted)]', word: 'stopped' },
+// One Heroicon per result; render with <component :is="statusOf(s).icon" class="size-4" />.
+export const STATUS: Record<string, { icon: Component, cls: string, word: string }> = {
+  pass: { icon: markRaw(CheckCircleIcon), cls: 'text-[var(--ok)]', word: 'passed' },
+  fail: { icon: markRaw(XCircleIcon), cls: 'text-[var(--bad)]', word: 'broke' },
+  unverified: { icon: markRaw(QuestionMarkCircleIcon), cls: 'text-[var(--warn)]', word: "can't check" },
+  running: { icon: markRaw(ArrowPathIcon), cls: 'text-[var(--ink)] spin-slow', word: 'testing now' },
+  pending: { icon: markRaw(ClockIcon), cls: 'text-[var(--muted)]', word: 'to go' },
+  stopped: { icon: markRaw(StopCircleIcon), cls: 'text-[var(--muted)]', word: 'stopped' },
 }
 export const statusOf = (s?: string) => STATUS[s ?? ''] ?? STATUS.pending!
 

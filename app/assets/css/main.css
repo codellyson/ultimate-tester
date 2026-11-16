@@ -97,3 +97,8 @@ button:not(.menu-item):not([data-check]):not(.static):active:not(:disabled) { sc
   *, *::before, *::after { transition-duration: 0.01ms !important; animation: none !important; }
   button:active:not(:disabled) { scale: none !important; }
 }
+
+/* Running status: a slow turn, not a busy spinner. */
+@keyframes spin-slow { to { rotate: 360deg; } }
+.spin-slow { animation: spin-slow 1.6s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spin-slow { animation: none; } }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowPathIcon, ArrowRightIcon, CheckIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/vue/16/solid'
 // A test: the verdict first, then what Tess saw (driven by the selected check), Tess's words, and the checks.
 import type { PlanItem, Persona } from '~/composables/useTester'
 const { state, show } = useTester()
@@ -184,8 +185,8 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
               <span
                 v-for="(c, i) in chips" :key="`${i}${c}`"
                 :class="['rounded-full px-3 py-1 text-[12px] shadow-sm', i === chips.length - 1 ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-white/95 surface text-[var(--muted)]']"
-              >{{ i === chips.length - 1 ? '◐' : '✓' }} {{ c }}</span>
-              <span v-if="live && failing" class="rounded-full bg-[var(--bad)] text-white px-3 py-1 text-[12px] shadow">✕ {{ failing.note || failing.name }}</span>
+              ><component :is="i === chips.length - 1 ? ArrowPathIcon : CheckIcon" :class="['size-3.5 inline -mt-0.5 me-1', i === chips.length - 1 && 'spin-slow']" aria-hidden="true" />{{ c }}</span>
+              <span v-if="live && failing" class="rounded-full bg-[var(--bad)] text-white px-3 py-1 text-[12px] shadow"><XMarkIcon class="size-3.5 inline -mt-0.5 me-1" aria-hidden="true" />{{ failing.note || failing.name }}</span>
             </div>
           </div>
         </div>
@@ -222,10 +223,10 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
               @click="show('setup')"
             >
               {{ f.who ? `Sign in as ${shortLabel(f.who.label)} to check ${f.n === 1 ? 'this' : `these ${f.n}`}` : `${f.n} check${plural(f.n)} couldn't run. Fix in Setup` }}
-              <span class="inline-block rtl:-scale-x-100">→</span>
+              <ArrowRightIcon class="size-4 inline -mt-0.5 rtl:-scale-x-100" aria-hidden="true" />
             </button>
             <template v-if="g.passed.length">
-              <button class="mt-1 py-1 text-start text-[13px] text-[var(--muted)] hover:text-[var(--ink)] flex gap-2" :aria-expanded="g.open" @click="toggleFold(g.gk)"><span :class="['inline-block transition-[rotate] duration-150', g.open && 'rotate-180']" aria-hidden="true">⌄</span> {{ g.passed.length }} passed</button>
+              <button class="mt-1 py-1 text-start text-[13px] text-[var(--muted)] hover:text-[var(--ink)] flex gap-2" :aria-expanded="g.open" @click="toggleFold(g.gk)"><ChevronDownIcon :class="['size-4 mt-0.5 transition-[rotate] duration-150', g.open && 'rotate-180']" aria-hidden="true" /> {{ g.passed.length }} passed</button>
               <Transition name="reveal"><TransitionGroup v-if="g.open" name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.passed" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup></Transition>
             </template>
           </div>

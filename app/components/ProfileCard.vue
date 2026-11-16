@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CheckIcon } from '@heroicons/vue/16/solid'
 // The profile Markdown as a readable card: one row per section, each editable in place.
 const props = defineProps<{ profile: string, basic?: boolean }>()
 const { setupAction } = useTester()
@@ -45,7 +46,7 @@ async function save() {
           </template>
           <p v-else-if="!row.lines.length || /^\(.*\)$/.test(row.lines.flat().join('').trim())" class="text-[var(--muted)]">{{ EMPTY[row.head] ?? 'Nothing here yet.' }}</p>
           <p v-for="(bits, i) in row.lines" v-else :key="i" :class="row.head === 'Must never break' && 'flex gap-2'">
-            <span v-if="row.head === 'Must never break'" class="text-[var(--ok)]">✓</span>
+            <CheckIcon v-if="row.head === 'Must never break'" class="size-4 shrink-0 mt-0.5 text-[var(--ok)]" aria-hidden="true" />
             <template v-for="(bit, j) in bits" :key="j">
               <code v-if="bit.startsWith('`')" class="mono text-[12px] rounded bg-[var(--sand)] px-1.5 py-0.5">{{ bit.slice(1, -1) }}</code>
               <template v-else>{{ bit }}</template>

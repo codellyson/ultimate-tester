@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { CheckIcon, PlusIcon } from '@heroicons/vue/16/solid'
+import { CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon } from '@heroicons/vue/20/solid'
 // First run for an app: welcome, Tess reads the repo, you check her plan, sign her in, choose when she tests, first test.
 const { state, api, addApp, addSample, setupAction, startTest, show } = useTester()
 const s = computed(() => state.setup)
@@ -65,7 +67,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
             :class="['flex items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors duration-200', i === step ? 'bg-white ring-1 ring-[var(--line)] text-[var(--ink)]' : 'text-[var(--muted)]']"
             :aria-current="i === step ? 'step' : undefined"
           >
-            <b :class="['transition-colors duration-200 size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ok)] text-white' : i === step ? 'bg-[var(--accent)] text-white' : 'bg-white ring-1 ring-[var(--line)]']">{{ i < step ? '✓' : i + 1 }}</b>
+            <b :class="['transition-colors duration-200 size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ok)] text-white' : i === step ? 'bg-[var(--accent)] text-white' : 'bg-white ring-1 ring-[var(--line)]']"><CheckIcon v-if="i < step" class="size-3" aria-hidden="true" /><template v-else>{{ i + 1 }}</template></b>
             <span class="hidden md:inline">{{ name }}</span>
           </span>
         </li>
@@ -88,16 +90,16 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
           <li v-if="!pre" class="px-4 py-2.5 text-[var(--muted)]">Checking this Mac…</li>
           <template v-else>
             <li class="px-4 py-2.5 flex items-center gap-2 flex-wrap">
-              <span :class="pre.claude.ok ? 'text-[var(--ok)]' : 'text-[var(--bad)]'" aria-hidden="true">{{ pre.claude.ok ? '✓' : '✕' }}</span>
+              <span :class="pre.claude.ok ? 'text-[var(--ok)]' : 'text-[var(--bad)]'" aria-hidden="true"><component :is="pre.claude.ok ? CheckCircleIcon : XCircleIcon" class="size-4" /></span>
               <span>{{ pre.claude.ok ? 'Claude Code is signed in' : 'Claude Code is not signed in. Run claude in a terminal and sign in, then come back.' }}</span>
               <span v-if="plan" class="text-[11px] rounded-full bg-[var(--sand)] text-[var(--muted)] px-2 py-0.5">{{ plan }}</span>
             </li>
             <li class="px-4 py-2.5 flex items-center gap-2">
-              <span :class="pre.chrome ? 'text-[var(--ok)]' : 'text-[var(--bad)]'" aria-hidden="true">{{ pre.chrome ? '✓' : '✕' }}</span>
+              <span :class="pre.chrome ? 'text-[var(--ok)]' : 'text-[var(--bad)]'" aria-hidden="true"><component :is="pre.chrome ? CheckCircleIcon : XCircleIcon" class="size-4" /></span>
               <span>{{ pre.chrome ? 'Google Chrome found' : 'Google Chrome not found. Install it; I drive Chrome to test.' }}</span>
             </li>
             <li class="px-4 py-2.5 flex items-center gap-2">
-              <span :class="nodeOk ? 'text-[var(--ok)]' : 'text-[var(--warn)]'" aria-hidden="true">{{ nodeOk ? '✓' : '!' }}</span>
+              <span :class="nodeOk ? 'text-[var(--ok)]' : 'text-[var(--warn)]'" aria-hidden="true"><component :is="nodeOk ? CheckCircleIcon : ExclamationTriangleIcon" class="size-4" /></span>
               <span>Node {{ pre.node.split('.')[0] }}{{ nodeOk ? '' : ': I need Node 20 or newer' }}</span>
             </li>
           </template>
@@ -140,7 +142,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
         <div class="ms-12 flex flex-col gap-3">
           <textarea v-model="notes" rows="3" maxlength="5000" class="field resize-none" placeholder="e.g. Payments run in test mode. The B2B pages need the B2B owner." aria-label="Things Tess should always keep in mind" />
           <TransitionGroup v-if="chips.length" name="fade" tag="div" class="flex flex-wrap gap-1.5">
-            <button v-for="c in chips" :key="c" class="rounded-full bg-[var(--sand)] hover:bg-[var(--line)] px-2.5 py-1 text-[12px]" @click="addChip(c)">+ {{ c }}</button>
+            <button v-for="c in chips" :key="c" class="rounded-full bg-[var(--sand)] hover:bg-[var(--line)] px-2.5 py-1 text-[12px]" @click="addChip(c)"><PlusIcon class="size-3.5 inline -mt-0.5 me-0.5" aria-hidden="true" />{{ c }}</button>
           </TransitionGroup>
           <p class="text-[12px] text-[var(--muted)]">This goes into every test. You can change it later, and I add to it when you correct me.</p>
           <div class="flex gap-2"><button class="btn-blue" @click="planOk">Looks right</button></div>
@@ -176,7 +178,8 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
               v-for="(t, i) in TARGETS.slice(0, 3)" :key="t.label" role="radio" :aria-checked="target === i"
               :class="['rounded-full px-3 py-1 text-[12px]', target === i ? 'bg-[var(--accent-soft)] text-[var(--accent)] font-medium' : 'bg-[var(--sand)] hover:bg-[var(--line)]']"
               @click="target = i"
-            >{{ target === i ? '✓ ' : '' }}{{ t.label }}</button>
+            >
+              <CheckIcon v-if="target === i" class="size-3.5 inline -mt-0.5 me-0.5" aria-hidden="true" />{{ t.label }}</button>
           </div>
           <input v-model="state.note" type="text" maxlength="1000" class="field" placeholder="Anything to focus on? (optional)" aria-label="Note for this test">
           <div><button class="btn-blue" :disabled="starting || s.running" @click="begin">{{ starting ? 'Starting…' : 'Start my first test' }}</button></div>

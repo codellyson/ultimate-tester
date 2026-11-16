@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronDownIcon, PlusIcon } from '@heroicons/vue/16/solid'
 // One bar: which app / which test (both are menus), connection trouble, New test and ⌘K.
 const { state, selectApp, openRun, startTest, addApp, show } = useTester()
 const app = computed(() => state.apps.find((a) => a.id === state.appId))
@@ -30,7 +31,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
     >
       <span class="size-5 rounded-[5px] bg-white ring-1 ring-[var(--line)] text-[var(--muted)] grid place-items-center text-[10px] font-semibold shrink-0" aria-hidden="true">{{ app ? app.name[0]!.toUpperCase() : '+' }}</span>
       <span class="truncate max-w-48">{{ app?.name ?? 'Add an app' }}</span>
-      <span v-if="app" :class="['text-[var(--muted)] text-[10px] transition-[rotate] duration-150', state.menu === 'app' && 'rotate-180']" aria-hidden="true">▾</span>
+      <ChevronDownIcon v-if="app" :class="['size-4 text-[var(--muted)] transition-[rotate] duration-150', state.menu === 'app' && 'rotate-180']" aria-hidden="true" />
     </button>
 
     <template v-if="app && (where || state.runs.length)">
@@ -42,10 +43,10 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
         @click.stop="toggle('runs')"
       >
         <span v-if="run?.status === 'running'" class="size-1.5 rounded-full bg-[var(--accent)] pulse shrink-0" aria-hidden="true" />
-        <span v-else-if="run" :class="[statusOf(run.status).cls, 'shrink-0']" aria-hidden="true">{{ statusOf(run.status).icon }}</span>
+        <component :is="statusOf(run.status).icon" v-else-if="run" :class="[statusOf(run.status).cls, 'size-4 shrink-0']" aria-hidden="true" />
         <span class="truncate">{{ short(run?.title) }}</span>
         <span v-if="run" class="text-[var(--muted)] shrink-0 tabular-nums">{{ when(run.id) }}</span>
-        <span :class="['text-[var(--muted)] text-[10px] transition-[rotate] duration-150', state.menu === 'runs' && 'rotate-180']" aria-hidden="true">▾</span>
+        <ChevronDownIcon :class="['size-4 text-[var(--muted)] shrink-0 transition-[rotate] duration-150', state.menu === 'runs' && 'rotate-180']" aria-hidden="true" />
       </button>
     </template>
 
@@ -55,7 +56,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
     <button
       v-if="app" ref="newBtn" :class="['btn shrink-0 h-7 py-0', !state.offline && 'ms-auto']"
       aria-haspopup="true" :aria-expanded="state.menu === 'new'" @click.stop="toggle('new')"
-    ><span aria-hidden="true">+</span> New test</button>
+    ><PlusIcon class="size-4 -ms-1" aria-hidden="true" />New test</button>
     <button
       :class="['shrink-0 h-7 rounded-md bg-white/70 ring-1 ring-[var(--line)] px-2.5 text-[var(--muted)] flex items-center gap-2.5 hover:bg-white', !app && !state.offline && 'ms-auto']"
       aria-label="Commands (⌘K)" @click="state.menu = null; state.cmdk = true"
@@ -73,7 +74,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
       </button>
       <div class="my-1 border-t border-[var(--line)]" />
       <button class="menu-item text-[var(--muted)]" @click="state.menu = null; show('setup')">Setup: how Tess tests {{ app?.name }}</button>
-      <button class="menu-item text-[var(--muted)]" @click="addApp()">+ Add an app…</button>
+      <button class="menu-item text-[var(--muted)]" @click="addApp()"><PlusIcon class="size-4" aria-hidden="true" />Add an app…</button>
     </div></Transition>
 
     <Transition name="pop"><div v-if="state.menu === 'runs'" class="origin-top-left absolute top-10 z-30 w-80 max-h-[60vh] overflow-y-auto rounded-xl bg-white surface-float p-1.5" :style="{ left: `${left}px` }" @click.stop>
@@ -85,7 +86,7 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
         @click="state.menu = null; openRun(r.id, i === 0)"
       >
         <span v-if="r.status === 'running'" class="w-4 grid place-items-center shrink-0"><span class="size-1.5 rounded-full bg-[var(--accent)] pulse" /></span>
-        <span v-else :class="[statusOf(r.status).cls, 'w-4 text-center shrink-0']" aria-hidden="true">{{ statusOf(r.status).icon }}</span>
+        <component :is="statusOf(r.status).icon" v-else :class="[statusOf(r.status).cls, 'size-4 shrink-0']" aria-hidden="true" />
         <span class="sr-only">{{ statusOf(r.status).word }}: </span>
         <span class="truncate flex-1">{{ short(r.title) }}</span>
         <span class="text-[12px] text-[var(--muted)] tabular-nums shrink-0">{{ when(r.id) }}</span>
