@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { CheckIcon } from '@heroicons/vue/16/solid'
 // The profile Markdown as a readable card: one row per section, each editable in place.
 const props = defineProps<{ profile: string, basic?: boolean }>()
 const { state, setupAction } = useTester()
@@ -33,31 +32,31 @@ async function save() {
 <template>
   <div class="max-w-2xl rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)]">
     <template v-if="editing === '*'">
-      <div class="p-4"><textarea v-model="draft" class="field mono text-[12px] min-h-96" aria-label="Profile Markdown" /></div>
-      <div class="flex gap-2 p-4"><button class="btn-blue" @click="save">Save</button><button class="btn" @click="editing = null">Cancel</button></div>
+      <div class="p-4"><textarea v-model="draft" class="field mono text-[12px] min-h-96" aria-label="Profile Markdown" @keydown.meta.s.prevent="save" @keydown.esc.stop="editing = null" /></div>
+      <div class="flex gap-2 p-4"><button class="btn-blue" title="Save (⌘S)" @click="save">Save</button><button class="btn" title="Cancel (Esc)" @click="editing = null">Cancel</button></div>
     </template>
     <template v-else>
       <div v-for="row in rows" :key="row.head" class="px-5 py-4 flex gap-4">
         <span class="w-32 shrink-0 text-[var(--muted)]">{{ row.label }}</span>
         <div class="selectable flex-1 min-w-0 flex flex-col gap-1">
           <template v-if="editing === row.head">
-            <textarea v-model="draft" class="field mono text-[12px] min-h-28" :aria-label="`Edit ${row.label}`" />
-            <div class="flex gap-2"><button class="btn-blue" @click="save">Save</button><button class="btn" @click="editing = null">Cancel</button></div>
+            <textarea v-model="draft" class="field mono text-[12px] min-h-28" :aria-label="`Edit ${row.label}`" @keydown.meta.s.prevent="save" @keydown.esc.stop="editing = null" />
+            <div class="flex gap-2"><button class="btn-blue" title="Save (⌘S)" @click="save">Save</button><button class="btn" title="Cancel (Esc)" @click="editing = null">Cancel</button></div>
           </template>
           <p v-else-if="!row.lines.length || /^\(.*\)$/.test(row.lines.flat().join('').trim())" class="text-[var(--muted)]">{{ EMPTY[row.head] ?? 'Nothing here yet.' }}</p>
           <p v-for="(bits, i) in row.lines" v-else :key="i" :class="row.head === 'Must never break' && 'flex gap-2'">
-            <CheckIcon v-if="row.head === 'Must never break'" class="size-4 shrink-0 mt-0.5 text-[var(--ok)]" aria-hidden="true" />
+            <span v-if="row.head === 'Must never break'" class="size-1.5 rounded-full bg-[var(--muted)] shrink-0 mt-[7px]" aria-hidden="true" />
             <template v-for="(bit, j) in bits" :key="j">
               <code v-if="bit.startsWith('`')" class="mono text-[12px] rounded bg-[var(--sand)] px-1.5 py-0.5">{{ bit.slice(1, -1) }}</code>
               <template v-else>{{ bit }}</template>
             </template>
           </p>
         </div>
-        <button v-if="editing !== row.head" class="link-quiet text-[12px] self-start shrink-0" :aria-label="`Edit ${row.label}`" @click="edit(row.head)">{{ row.head in sections ? 'Edit' : 'Add' }}</button>
+        <button v-if="editing === null" class="link-quiet text-[12px] self-start shrink-0" :aria-label="`Edit ${row.label}`" @click="edit(row.head)">{{ row.head in sections ? 'Edit' : 'Add' }}</button>
       </div>
       <div class="px-5 py-3 text-[12px] text-[var(--muted)] flex gap-3">
         <span>Saved as .ultimate-tester.md in the repo</span>
-        <button class="link-quiet ms-auto" @click="edit('*')">Open as Markdown</button>
+        <button v-if="editing === null" class="link-quiet ms-auto" @click="edit('*')">Open as Markdown</button>
       </div>
     </template>
   </div>

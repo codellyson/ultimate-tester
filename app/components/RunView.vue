@@ -2,7 +2,7 @@
 import { ArrowPathIcon, ArrowRightIcon, CheckIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/vue/16/solid'
 // A test: the verdict first, then what Tess saw (driven by the selected check), Tess's words, and the checks.
 import type { PlanItem, Persona } from '~/composables/useTester'
-const { state, openSettings, rerun, tauri } = useTester()
+const { state, openSettings, rerun, stopTest, tauri } = useTester()
 const r = computed(() => state.detail!)
 const plan = computed(() => state.plan)
 const v = computed(() => r.value.verdict)
@@ -103,6 +103,9 @@ const screen = computed(() => {
   if (r.value.live && r.value.live.url !== 'about:blank') return { src: `/api/apps/${state.appId}/shots/${r.value.id}/live.jpg?t=${liveTick.value}`, alt: 'Live view of the app being tested', label: `${live.value ? 'Live' : 'Last screen'} · ${r.value.live.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
   return { src: null, empty: live.value ? 'Tess is reading the change. The app shows up here once she opens it.' : (r.value.status === 'stopped' ? 'The test was stopped before Tess took a screenshot.' : r.value.live ? "Tess never reached the app, so there's no screen to show. Her note in the checklist says why." : 'No screen was recorded for this test.'), label: live.value ? '' : 'No screen' }
 })
+// A finished test with nothing to show: the panel shrinks so Tess's words and the checks lead.
+const noEvidence = computed(() => finished.value && !screen.value.src)
+
 // Evidence up close: click or Space for full size; drag it out; right-click to copy or find the file.
 const zoomed = ref(false)
 watch(() => screen.value.src, (src) => { if (!src) zoomed.value = false })
@@ -141,7 +144,7 @@ const says = computed(() => r.value.steps.filter((s) => s.startsWith('say: ')).m
 const VERDICT_LEAD = /^\s*(safe to push|don['’]t push yet|not safe yet|can['’]t say yet)[^.!?:]*[.!?:]\s*/i
 const bubble = computed(() => (r.value.status === 'stopped' ? says.value.at(-1) ?? 'I stopped before saying anything.' : v.value ? v.value.summary.replace(VERDICT_LEAD, '').replace(/^\p{Ll}/u, (c) => c.toUpperCase()) || v.value.summary : says.value.at(-1) ?? 'Reading the change…'))
 const bubbleLabel = computed(() => (r.value.status === 'stopped' ? 'Tess · last thing I said' : v.value ? 'Tess · what I found' : fail.value ? 'Tess · caught one' : live.value ? 'Tess · testing' : 'Tess'))
-const bubbleEdge = computed(() => (v.value && v.value.status !== 'pass' ? `inset 3px 0 0 ${v.value.status === 'fail' ? 'var(--bad)' : 'var(--warn)'}` : ''))
+const bubbleEdge = computed(() => (v.value && v.value.status !== 'pass' && r.value.status !== 'stopped' ? `inset 3px 0 0 ${v.value.status === 'fail' ? 'var(--bad)' : 'var(--warn)'}` : ''))
 
 // Checks, by who Tess tested as: problems first with their one fix, passes folded.
 const label = (k: string) => state.setup?.personas.find((x) => x.key === k)?.label ?? k
@@ -201,6 +204,8 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
       <p class="text-[var(--muted)] flex flex-wrap gap-x-1.5" :title="v?.usage">
         <template v-for="(m, i) in meta" :key="m.text"><span v-if="i" aria-hidden="true">·</span><span :class="m.cls">{{ m.text }}</span></template>
       </p>
+      <!-- While Tess works, Stop is right here, not only in the Test menu (⌘.). -->
+      <button v-if="live && state.setup?.running" class="btn self-center min-[880px]:order-last" title="Stop this test (⌘.)" @click="stopTest()">Stop</button>
       <div v-if="live" class="w-full min-[880px]:w-[320px] min-[880px]:ms-auto self-center">
         <div class="flex h-2 rounded-full overflow-hidden bg-[var(--sand)]">
           <span v-for="(b, i) in bar" :key="i" :class="['transition-[width] duration-300 ease-out', i === 3 && 'pulse']" :style="{ width: b.width, background: b.color }" />
@@ -212,7 +217,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 
     <div class="flex-1 min-h-0 flex flex-col overflow-y-auto min-[880px]:flex-row min-[880px]:overflow-visible">
       <main class="flex-1 min-w-0 p-4 flex flex-col gap-3" aria-label="What Tess saw">
-        <div class="relative flex-1 min-h-[50vh] min-[880px]:min-h-0 rounded-2xl overflow-hidden bg-[var(--canvas)] text-zinc-900 surface flex flex-col">
+        <div :class="['relative rounded-2xl overflow-hidden surface flex flex-col', noEvidence ? 'shrink-0 h-28 bg-[var(--surface)]' : 'flex-1 min-h-[50vh] min-[880px]:min-h-0 bg-[var(--canvas)] text-zinc-900']">
           <div class="h-8 shrink-0 bg-[var(--sand)] border-b border-[var(--line)] flex items-center px-3 text-[12px] text-[var(--muted)] gap-2 min-w-0">
             <span v-if="live" class="size-1.5 rounded-full bg-rose-500 pulse shrink-0" />
             <span class="truncate">{{ screen.label }}</span>
@@ -226,7 +231,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
                 class="absolute inset-0 size-full object-contain object-top cursor-zoom-in" title="Click or press Space to enlarge"
                 @click="zoomed = true" @contextmenu="evidenceMenu"
               >
-              <p v-else key="empty" class="absolute inset-0 grid place-items-center text-zinc-500 px-6 text-center text-pretty">{{ screen.empty }}</p>
+              <p v-else key="empty" :class="['absolute inset-0 grid place-items-center px-6 text-center text-pretty', noEvidence ? 'text-[var(--muted)]' : 'text-zinc-500']">{{ screen.empty }}</p>
             </Transition>
             <div class="absolute end-4 top-4 flex flex-col items-end gap-1.5">
               <span

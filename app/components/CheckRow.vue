@@ -38,7 +38,7 @@ const showNote = computed(() => selected.value && props.item.name !== OTHER)
       <Transition name="reveal" mode="out-in">
       <p v-if="taught" key="taught" class="text-[var(--ok)]" role="status">Got it. I'll remember that on every run.</p>
       <form v-else-if="teaching" key="form" class="flex flex-col gap-2" @submit.prevent="teach">
-        <textarea v-model="lesson" class="field min-h-16" maxlength="500" placeholder="What should I know next time? e.g. “The empty cart is expected for new merchants.”" aria-label="What Tess should know next time" @keydown.meta.enter="teach" />
+        <textarea v-model="lesson" class="field min-h-16" maxlength="500" placeholder="What should I know next time? e.g. “The empty cart is expected for new merchants.”" aria-label="What Tess should know next time" @keydown.meta.enter="lesson.trim() && teach()" />
         <div class="flex gap-2"><button class="btn-blue" :disabled="!lesson.trim()">Teach Tess</button><button type="button" class="btn" @click="teaching = false">Cancel</button></div>
       </form>
       <button v-else key="ask" class="link self-start text-[12px]" @click="teaching = true">Tess got this wrong?</button>

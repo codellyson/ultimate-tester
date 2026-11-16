@@ -30,6 +30,7 @@ const state = reactive({
   detail: null as RunDetail | null,
   plan: [] as PlanItem[], // last good plan: the tester rewrites plan.json mid-run
   flash: '',
+  dismissed: '', // an error the person closed: the next poll doesn't bring the same one back
   sel: { id: null as string | null, check: null as string | null, shot: 0 },
   unfolded: new Set<string>(),
   confirmJustDrafted: false,
@@ -122,7 +123,7 @@ async function refresh() {
     }
   } catch (e) {
     if ((e as Error).message === OFFLINE) state.offline = true
-    else state.flash = (e as Error).message
+    else if ((e as Error).message !== state.dismissed) state.flash = (e as Error).message
   }
 }
 

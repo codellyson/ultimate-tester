@@ -30,7 +30,12 @@ onMounted(() => { if (step.value === 1 && !drafting.value) setupAction('draft') 
 watch(() => s.value?.profileReady && !drafting.value, (ready) => { if (ready && step.value === 1) go(2) })
 
 // 2 · Things to always keep in mind.
-const notes = ref('')
+// Starts from the notes already in the profile, so 'Looks right' keeps them (it saves the whole section).
+const existingNotes = () => {
+  const sec = (s.value?.profile ?? '').split(/^## /m).find((p) => p.startsWith('Notes for Tess'))
+  return (sec ?? '').split('\n').slice(1).map((l) => l.replace(/^\s*-\s*/, '').trim()).filter((l) => l && !/^\(.*\)$/.test(l)).join('\n')
+}
+const notes = ref(existingNotes())
 const CHIPS = ['Check mobile width too', 'Payments run in test mode', 'Empty states are expected for new accounts', 'Skip the admin area']
 const chips = computed(() => CHIPS.filter((c) => !notes.value.includes(c)))
 const addChip = (c: string) => { notes.value = `${notes.value.trim() ? `${notes.value.trim()}\n` : ''}${c}` }
