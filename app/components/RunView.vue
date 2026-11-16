@@ -34,9 +34,15 @@ const verdict = computed(() => {
     return { lead: note ? 'Safe to push what I checked. ' : 'Safe to push. ', em: `All ${pass.value} checks passed${note ? ', with one thing Tess left unchecked' : ''}.`, cls: note ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }
   }
   if (v.value?.status === 'fail') return { lead: "Don't push yet: ", em: `${n(fail.value, 'thing')} broke.`, cls: 'text-[var(--bad)]' }
+  // Tess never got evidence from the app and no missing sign-in explains it: say so, never "safe".
+  if (v.value && !fail.value && unk.value && !blockers.value.length && !r.value.shots.length) {
+    return { lead: "Couldn't test this in the app. ", em: `${n(unk.value, 'check')} didn't run.`, cls: 'text-[var(--warn)]' }
+  }
   if (v.value && pass.value && !fail.value) {
-    const who = blockers.value.length ? blockers.value.map((b) => `a ${shortLabel(b.label).replace(/^(a|an) /i, '')}`).join(' and ') : 'a look'
-    return { lead: 'Safe to push what I could reach. ', em: `${n(unk.value, 'check')} still ${unk.value === 1 ? 'needs' : 'need'} ${who}.`, cls: 'text-[var(--warn)]' }
+    const need = blockers.value.length
+      ? `still ${unk.value === 1 ? 'needs' : 'need'} ${blockers.value.map((b) => `a ${shortLabel(b.label).replace(/^(a|an) /i, '')}`).join(' and ')}`
+      : "couldn't run"
+    return { lead: 'Safe to push what I could reach. ', em: `${n(unk.value, 'check')} ${need}.`, cls: 'text-[var(--warn)]' }
   }
   if (v.value) return { lead: "Can't say yet: ", em: `${unk.value ? n(unk.value, 'check') : 'some checks'} couldn't run.`, cls: 'text-[var(--warn)]' }
   if (r.value.status === 'stopped') return { lead: 'This test stopped before the end.', em: '', cls: '' }
@@ -90,8 +96,9 @@ const screen = computed(() => {
       ? { src: shotUrl(shot), file: shot, alt: `Evidence for: ${what.value}`, label: `Evidence · ${what.value}${mine.value.length > 1 ? ` · ${state.sel.shot + 1} of ${mine.value.length} (← →)` : ''}` }
       : { src: null, empty: `Tess didn't take a screenshot for “${what.value}”. Her note is in the checklist.`, label: `Evidence · ${what.value}` }
   }
-  if (r.value.live) return { src: `/api/apps/${state.appId}/shots/${r.value.id}/live.jpg?t=${liveTick.value}`, alt: 'Live view of the app being tested', label: `${live.value ? 'Live' : 'Last screen'} · ${r.value.live.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
-  return { src: null, empty: live.value ? 'Tess is reading the change. The app shows up here once she opens it.' : 'No screen was recorded for this test.', label: '' }
+  // A browser that never left about:blank is not evidence of anything.
+  if (r.value.live && r.value.live.url !== 'about:blank') return { src: `/api/apps/${state.appId}/shots/${r.value.id}/live.jpg?t=${liveTick.value}`, alt: 'Live view of the app being tested', label: `${live.value ? 'Live' : 'Last screen'} · ${r.value.live.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
+  return { src: null, empty: live.value ? 'Tess is reading the change. The app shows up here once she opens it.' : (r.value.live ? "Tess never reached the app, so there's no screen to show. Her note in the checklist says why." : 'No screen was recorded for this test.'), label: '' }
 })
 // Evidence up close: click or Space for full size; drag it out; right-click to copy or find the file.
 const zoomed = ref(false)
@@ -216,7 +223,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
                 class="absolute inset-0 size-full object-contain object-top cursor-zoom-in" title="Click or press Space to enlarge"
                 @click="zoomed = true" @contextmenu="evidenceMenu"
               >
-              <p v-else key="empty" class="absolute inset-0 grid place-items-center text-[var(--muted)] px-6 text-center">{{ screen.empty }}</p>
+              <p v-else key="empty" class="absolute inset-0 grid place-items-center text-zinc-500 px-6 text-center text-pretty">{{ screen.empty }}</p>
             </Transition>
             <div class="absolute end-4 top-4 flex flex-col items-end gap-1.5">
               <span
