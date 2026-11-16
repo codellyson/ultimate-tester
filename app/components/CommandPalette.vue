@@ -45,7 +45,7 @@ function key(e: KeyboardEvent) {
       <input
         ref="input" v-model="q" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list"
         :aria-activedescendant="sel >= 0 ? `cmd-${sel}` : undefined" aria-label="Command" placeholder="What should Tess do?"
-        class="w-full px-4 py-3 text-[15px] outline-none focus:bg-[var(--page)] border-b border-[var(--line)]" @keydown="key"
+        class="no-ring w-full px-4 py-3 text-[15px] bg-transparent outline-none border-b border-[var(--line)]" @keydown="key"
       >
       <div id="cmdk-list" class="max-h-80 overflow-y-auto p-1.5" role="listbox" aria-label="Commands">
         <template v-for="g in groups" :key="g.group">
