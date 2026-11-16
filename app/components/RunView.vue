@@ -42,7 +42,8 @@ const verdict = computed(() => {
   if (r.value.status === 'stopped') return v.value?.summary === 'You stopped this test.'
     ? { lead: 'You stopped this test.', em: '', cls: '' }
     : { lead: 'This test stopped before the end.', em: '', cls: '' }
-  if (v.value?.status === 'pass') {
+  // Green only when nothing is left unchecked, whatever the stored status says.
+  if (v.value?.status === 'pass' && !unk.value) {
     const note = /\bnot checked\b|couldn't check|didn't check/i.test(v.value.summary ?? '')
     // Something left unchecked is never a plain green yes.
     return { lead: note ? 'Everything I tested passed. ' : 'Safe to push. ', em: `All ${pass.value} checks passed${note ? ', but Tess mentions something she didn\'t check' : ''}.`, cls: note ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }

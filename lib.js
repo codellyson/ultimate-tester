@@ -34,10 +34,17 @@ export const VERDICT_SCHEMA = {
 };
 
 // The tester's word is not enough: a pass without evidence is downgraded.
-export function enforceEvidence(verdict) {
-  const flows = (verdict.flows ?? []).map((f) =>
+// plan: the checks Tess said she would run (plan.json). One she planned but never reported is not checked,
+// so the run can't be a pass however the reported ones went.
+export function enforceEvidence(verdict, plan = []) {
+  const reported = (verdict.flows ?? []).map((f) =>
     f.status === 'pass' && !(f.evidence?.length) ? { ...f, status: 'unverified', actual: 'no evidence given' } : f,
   );
+  const names = new Set(reported.map((f) => f.name));
+  const missing = (Array.isArray(plan) ? plan : [])
+    .filter((p) => p?.name && !names.has(p.name))
+    .map((p) => ({ name: p.name, status: 'unverified', actual: 'planned, but not reported in the verdict', persona: p.persona }));
+  const flows = [...reported, ...missing];
   let status = verdict.status;
   if (flows.length === 0) status = 'unverified';
   else if (flows.some((f) => f.status === 'fail')) status = 'fail';

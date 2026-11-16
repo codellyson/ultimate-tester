@@ -202,7 +202,10 @@ async function run({ commit = null, range = null, dedupe = false, note = '' } = 
   if (!HEADLESS) await openWindow();
   const started = Date.now();
   const { verdict: raw, costUsd } = await runTester(prompt, runDir);
-  const verdict = enforceEvidence(raw);
+  // Hold the verdict to Tess's own plan: anything planned but not reported counts as not checked.
+  let plan = [];
+  try { plan = JSON.parse(readFileSync(join(runDir, 'plan.json'), 'utf8')); } catch {}
+  const verdict = enforceEvidence(raw, plan);
   const usage = usageLabel({ ...billing(), costUsd });
   const report = renderReport(verdict, { runDir, durationS: Math.round((Date.now() - started) / 1000), usage });
   writeFileSync(join(runDir, 'verdict.json'), JSON.stringify({ ...verdict, costUsd, usage, model: MODEL, durationMs: Date.now() - started }, null, 2));

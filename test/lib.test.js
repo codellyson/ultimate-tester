@@ -94,3 +94,10 @@ test('removing our Stop hook leaves every other hook alone', async () => {
   assert.deepEqual(withoutOurStopHook({ model: 'x', hooks: { Stop: [{ hooks: [ours] }] } }), { model: 'x' });
   assert.deepEqual(withoutOurStopHook({}), {});
 });
+
+test('a planned check missing from the verdict makes it unverified, never a pass', () => {
+  const v = enforceEvidence({ status: 'pass', flows: [{ name: 'Login', status: 'pass', evidence: ['a.png'] }] }, [{ name: 'Login' }, { name: 'Checkout', persona: 'owner' }]);
+  assert.equal(v.status, 'unverified');
+  assert.deepEqual(v.flows.map((f) => [f.name, f.status]), [['Login', 'pass'], ['Checkout', 'unverified']]);
+  assert.equal(enforceEvidence({ status: 'pass', flows: [{ name: 'Login', status: 'pass', evidence: ['a.png'] }] }, [{ name: 'Login' }]).status, 'pass');
+});
