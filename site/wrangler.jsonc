@@ -4,7 +4,6 @@
   // static site: Vite builds into dist, served as-is; the DMG comes from GitHub releases
   "assets": { "directory": "./dist" },
   "routes": [
-    { "pattern": "ultimate-tester.kreativekorna.com", "custom_domain": true },
-    { "pattern": "tester.kreativekorna.com", "custom_domain": true }
+    { "pattern": "ultimate-tester.kreativekorna.com", "custom_domain": true }
   ]
 }
