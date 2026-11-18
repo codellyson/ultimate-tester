@@ -1,7 +1,7 @@
 {
   "name": "ultimate-tester-site",
   "compatibility_date": "2026-11-01",
-  // static site: Vite builds into dist, served as-is (DMG included)
+  // static site: Vite builds into dist, served as-is; the DMG comes from GitHub releases
   "assets": { "directory": "./dist" },
   "routes": [{ "pattern": "tester.kreativekorna.com", "custom_domain": true }]
 }
