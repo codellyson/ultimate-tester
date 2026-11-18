@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ArrowPathIcon, ArrowRightIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/vue/16/solid'
+import { PhArrowClockwise, PhArrowRight, PhCopy, PhGlobeSimple, PhStop, PhXCircle, PhCircleDashed } from '@phosphor-icons/vue'
 // A test: the verdict first, then what Tess saw (driven by the selected check), Tess's words, and the checks.
 import type { PlanItem, Persona } from '~/composables/useTester'
-const { state, openSettings, rerun, stopTest, tauri } = useTester()
+const { state, openSettings, rerun, stopTest, startTest, tauri } = useTester()
 const r = computed(() => state.detail!)
 const v = computed(() => r.value.verdict)
 const flows = computed(() => v.value?.flows ?? [])
@@ -18,6 +18,7 @@ const plan = computed<PlanItem[]>(() => {
   return [...fromPlan, ...extra]
 })
 const live = computed(() => r.value.status === 'running')
+const isSetup = computed(() => r.value.change?.kind === 'setup')
 const finished = computed(() => !live.value)
 const count = (st: string) => plan.value.filter((p) => p.status === st).length
 const pass = computed(() => count('pass'))
@@ -35,9 +36,35 @@ function blockedBy(p: PlanItem): Persona | null {
 }
 const blockers = computed(() => [...new Set(plan.value.filter((p) => p.status === 'unverified').map(blockedBy).filter(Boolean))] as Persona[])
 
-// The answer first. Unrun checks never get a plain yes: "safe to push what I could reach", in amber.
+// "Set this up": checks that couldn't run because something they need doesn't exist yet, grouped by what's missing.
+const missing = computed(() => {
+  if (!finished.value || isSetup.value) return []
+  const by = new Map<string, { need: string, person: boolean, checks: string[] }>()
+  for (const f of flows.value) {
+    if (f.status !== 'unverified' || !f.needs) continue
+    const m = by.get(f.needs) ?? { need: f.needs, person: f.setupBy === 'person', checks: [] }
+    m.checks.push(f.name)
+    by.set(f.needs, m)
+  }
+  return [...by.values()]
+})
+const blockedChecks = computed(() => missing.value.reduce((a, m) => a + m.checks.length, 0))
+function setUp() { startTest({ kind: 'setup', target: r.value.id }) }
+// After a setup run: the same test as before, told which checks to look at again.
+function recheck() {
+  const s = r.value.change?.source
+  if (!s) return
+  state.note = [`Re-check after setup: ${s.checks.join('; ')}`, s.note].filter(Boolean).join('. ')
+  startTest({ kind: s.kind, target: s.target ?? undefined })
+}
+// The result as counts, never a judgement: what passed, what broke, what didn't run. Colour still says which.
 const verdict = computed(() => {
   const n = (x: number, w: string) => `${x} ${w}${plural(x)}`
+  const total = plan.value.length || pass.value + fail.value + unk.value
+  // A setup run creates test data; its items are "set up" or "need you", not passed or broken.
+  if (isSetup.value && v.value) return unk.value
+    ? { lead: `${pass.value} of ${n(total, 'item')} set up.`, em: ` ${unk.value} ${unk.value === 1 ? 'needs' : 'need'} you.`, cls: 'text-[var(--warn)]' }
+    : { lead: `${n(pass.value, 'item')} set up.`, em: '', cls: 'text-[var(--ok)]' }
   // Stopped comes first: a stopped test is not a result, whatever was checked before it.
   if (r.value.status === 'stopped') return v.value?.summary === 'You stopped this test.'
     ? { lead: 'You stopped this test.', em: '', cls: '' }
@@ -45,24 +72,21 @@ const verdict = computed(() => {
   // Green only when nothing is left unchecked, whatever the stored status says.
   if (v.value?.status === 'pass' && !unk.value) {
     const note = /\bnot checked\b|couldn't check|didn't check/i.test(v.value.summary ?? '')
-    // Something left unchecked is never a plain green yes.
-    return { lead: note ? 'Everything I tested passed. ' : 'Safe to push. ', em: `All ${pass.value} checks passed${note ? ', but Tess mentions something she didn\'t check' : ''}.`, cls: note ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }
+    return { lead: `${n(pass.value, 'check')} passed.`, em: note ? ' Tess lists something she didn\'t check.' : '', cls: note ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }
   }
-  if (v.value?.status === 'fail') return { lead: "Don't push yet: ", em: `${n(fail.value, 'thing')} broke.`, cls: 'text-[var(--bad)]' }
-  // Tess never got evidence from the app and no missing sign-in explains it: say so, never "safe".
-  if (v.value && !fail.value && unk.value && !blockers.value.length && !r.value.shots.length) {
-    return { lead: "Couldn't test this in the app. ", em: `${n(unk.value, 'check')} didn't run.`, cls: 'text-[var(--warn)]' }
+  if (v.value?.status === 'fail' || (!v.value && fail.value)) return { lead: `${fail.value} of ${n(total, 'check')} broke.`, em: '', cls: 'text-[var(--bad)]' }
+  // Tess never got evidence from the app and no missing sign-in explains it.
+  if (v.value && !fail.value && !pass.value && unk.value && !blockers.value.length && !r.value.shots.length) {
+    return { lead: 'No checks ran.', em: ' Tess couldn\'t reach the app.', cls: 'text-[var(--warn)]' }
   }
-  // "Safe to push what I could reach" only when every unrun check is waiting on a sign-in you can add;
-  // any other gap is an honest "can't say yet" (prompt.md: never call a run safe if a flow wasn't checked).
+  // Every unrun check is waiting on a sign-in you can add: say which.
   const allBlockedBySignIn = plan.value.filter((p) => p.status === 'unverified').every((p) => !!blockedBy(p))
   if (v.value && pass.value && !fail.value && allBlockedBySignIn) {
-    const need = `still ${unk.value === 1 ? 'needs' : 'need'} ${blockers.value.map((b) => `a ${shortLabel(b.label).replace(/^(a|an) /i, '')}`).join(' and ')}`
-    return { lead: 'Safe to push what I could reach. ', em: `${n(unk.value, 'check')} ${need}.`, cls: 'text-[var(--warn)]' }
+    const need = `${unk.value === 1 ? 'needs' : 'need'} ${blockers.value.map((b) => `a ${shortLabel(b.label).replace(/^(a|an) /i, '')}`).join(' and ')}`
+    return { lead: `${pass.value} of ${n(total, 'check')} passed.`, em: ` ${unk.value} ${need}.`, cls: 'text-[var(--warn)]' }
   }
-  if (v.value) return { lead: "Can't say yet: ", em: `${unk.value ? n(unk.value, 'check') : 'some checks'} couldn't run.`, cls: 'text-[var(--warn)]' }
-  if (fail.value) return { lead: 'Not safe yet: ', em: `${n(fail.value, 'thing')} broke.`, cls: 'text-[var(--bad)]' }
-  return { lead: pass.value ? 'Looking good so far.' : 'Tess is getting started.', em: '', cls: '' }
+  if (v.value) return { lead: `${pass.value} of ${n(total, 'check')} passed.`, em: ` ${unk.value || 'Some'} couldn't run.`, cls: 'text-[var(--warn)]' }
+  return { lead: total ? `${pass.value + fail.value + unk.value} of ${n(total, 'check')} done.` : 'Starting.', em: '', cls: '' }
 })
 const tested = computed(() => {
   const c = r.value.change
@@ -77,7 +101,7 @@ const copied = ref(false)
 // Tess got no evidence and nothing broke: the environment, not the code, is the likely problem.
 const retryFirst = computed(() => r.value.status === 'stopped' || (!!v.value && !fail.value && !r.value.shots.length))
 async function copyReport() {
-  if (!v.value) { state.flash = 'Open a finished test to copy its report.'; return }
+  if (!v.value) { state.flash = "This test isn't finished, so there's no report to copy yet."; return }
   const app = state.apps.find((a) => a.id === state.appId)
   const dir = app ? `${app.root}/.ultimate-tester/runs/${r.value.id}` : ''
   const lines = [`Ultimate Tester: ${verdict.value.lead}${verdict.value.em}`.trim(), tested.value, '', v.value.summary]
@@ -96,31 +120,31 @@ async function copyReport() {
 }
 watch(() => state.copyTick, () => copyReport())
 
-const now = ref(Date.now())
-// Under the verdict: counts only when something isn't a pass; the test's name and time live in the title bar.
-const meta = computed(() => {
-  if (live.value) {
-    const left = r.value.typicalMs ? r.value.typicalMs - (now.value - started(r.value.id)) : null
-    return [{ text: 'Tess is still testing', cls: '' }, ...(left && left > 60000 ? [{ text: `about ${Math.round(left / 60000)} minutes left`, cls: '' }] : left && left > 0 ? [{ text: 'almost done', cls: '' }] : [])]
-  }
-  const out: { text: string, cls: string }[] = []
-  if (fail.value || unk.value) {
-    if (pass.value) out.push({ text: `${pass.value} passed`, cls: '' })
-    if (fail.value) out.push({ text: `${fail.value} broke`, cls: 'text-[var(--bad)] font-medium' })
-    if (unk.value) out.push({ text: `${unk.value} can't check`, cls: 'text-[var(--warn)] font-medium' })
-  }
-  if (v.value) out.push({ text: `${Math.round((v.value.durationMs ?? 0) / 60000) || '<1'} min`, cls: '' })
-  if (finished.value && !r.value.shots.length) out.push({ text: 'no screenshots', cls: '' })
-  return out
+// DESIGN.md header: a status pill, a meta line, the change's title as the heading.
+const pill = computed(() => {
+  if (live.value) return { kind: 'live', text: `${isSetup.value ? 'Setting up' : 'Testing'} · ${plan.value.length - todo.value} of ${plan.value.length || '…'}` }
+  if (r.value.status === 'stopped') return { kind: 'stopped', text: 'Stopped' }
+  if (isSetup.value && v.value) return unk.value ? { kind: 'unk', text: `${unk.value} need${unk.value === 1 ? 's' : ''} you · ${pass.value} set up` } : { kind: 'done', text: `${pass.value} set up` }
+  if (fail.value) return { kind: 'fail', text: `${fail.value} broke · ${pass.value} passed` }
+  if (unk.value) return { kind: 'unk', text: `${unk.value} couldn't run · ${pass.value} passed` }
+  if (v.value) return { kind: 'done', text: `${pass.value} of ${plan.value.length || pass.value} passed` }
+  return { kind: 'live', text: 'Starting' }
 })
-const bar = computed(() => {
-  const total = Math.max(plan.value.length, 1)
-  return [
-    { n: pass.value, color: 'var(--ok)', word: 'passed' }, { n: fail.value, color: 'var(--bad)', word: 'broke' },
-    { n: unk.value, color: 'var(--warn)', word: "can't check" }, { n: todo.value, color: 'color-mix(in srgb, var(--accent) 35%, transparent)', word: 'to go' },
-  ].map((x) => ({ ...x, width: `${(x.n / total) * 100}%` }))
+const title = computed(() => {
+  const c = r.value.change
+  const first = c?.message.split('\n')[0] ?? ''
+  if (!c || c.kind === 'changes' || first.startsWith('(not committed')) return isSetup.value ? 'Making test data' : "Changes you haven't committed"
+  return first.replace(/^[0-9a-f]{7,40} /, '')
+})
+const metaLine = computed(() => {
+  const c = r.value.change
+  const hash = c?.message.match(/^([0-9a-f]{7,40}) /)?.[1]?.slice(0, 7)
+  const files = c?.files?.length ? `${c.files.length} file${plural(c.files.length)}` : ''
+  const mins = v.value ? `${Math.round((v.value.durationMs ?? 0) / 60000) || '<1'} min` : ''
+  return [hash, files, mins, when(r.value.id)].filter(Boolean).join(' · ')
 })
 
+const now = ref(Date.now())
 // Evidence: the selected check drives the screen. Screenshots no check claims sit in "Other screenshots".
 const shotUrl = (x: string) => `/api/apps/${state.appId}/shots/${r.value.id}/${x}`
 const evidenceOf = (name: string) => (flows.value.find((f) => f.name === name)?.evidence ?? []).map((e) => e.split('/').at(-1)!).filter((e) => r.value.shots.includes(e))
@@ -136,20 +160,22 @@ watchEffect(() => {
 })
 const mine = computed(() => (state.sel.check ? shotsFor(state.sel.check) : []))
 const what = computed(() => (state.sel.check === OTHER ? 'Other screenshots' : state.sel.check ?? ''))
+const selFlow = computed(() => flows.value.find((f) => f.name === state.sel.check))
+const selItem = computed(() => plan.value.find((p) => p.name === state.sel.check))
+// What Tess saw, in her words: her note on the check, else what she reported seeing.
+const saw = computed(() => selItem.value?.note || selFlow.value?.actual || '')
 const liveTick = ref(0)
 const screen = computed(() => {
   if (finished.value && r.value.shots.length) {
     const shot = mine.value[Math.min(state.sel.shot, mine.value.length - 1)]
     return shot
       ? { src: shotUrl(shot), file: shot, alt: `Evidence for: ${what.value}`, label: `Evidence · ${what.value}${mine.value.length > 1 ? ` · ${state.sel.shot + 1} of ${mine.value.length} (← →)` : ''}` }
-      : { src: null, empty: `Tess didn't take a screenshot for “${what.value}”. Her note is in the checklist.`, label: `Evidence · ${what.value}` }
+      : { src: null, empty: `I didn't take a screenshot for this one. My note is on the check.`, label: `Evidence · ${what.value}` }
   }
   // A browser that never left about:blank is not evidence of anything.
-  if (r.value.live && r.value.live.url !== 'about:blank') return { src: `/api/apps/${state.appId}/shots/${r.value.id}/live.jpg?t=${liveTick.value}`, alt: 'Live view of the app being tested', label: `${live.value ? 'Live' : 'Last screen'} · ${r.value.live.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
-  return { src: null, empty: live.value ? 'Tess is reading the change. The app shows up here once she opens it.' : (r.value.status === 'stopped' ? 'The test was stopped before Tess took a screenshot.' : r.value.live ? "Tess never reached the app, so there's no screen to show. Her note in the checklist says why." : 'No screen was recorded for this test.'), label: live.value ? '' : 'No screen' }
+  if (r.value.live && r.value.live.url !== 'about:blank') return { src: `/api/apps/${state.appId}/shots/${r.value.id}/live.jpg?t=${liveTick.value}`, alt: 'Your app, live, as I test it', label: `${live.value ? 'Live' : 'Last screen'} · ${r.value.live.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
+  return { src: null, empty: live.value ? (isSetup.value ? "I'm starting your app. You'll see it here once it's open." : "I'm reading what you changed. You'll see your app here once I open it.") : (r.value.status === 'stopped' ? 'The test stopped before I took a screenshot.' : r.value.live ? "I couldn't reach your app, so there's nothing to show. My note on the checks says why." : "There's no screenshot for this test."), label: live.value ? '' : 'No screen' }
 })
-// A finished test with nothing to show: the panel shrinks so Tess's words and the checks lead.
-const noEvidence = computed(() => finished.value && !r.value.shots.length && !screen.value.src)
 
 // Evidence up close: click or Space for full size; drag it out; right-click to copy or find the file.
 const zoomed = ref(false)
@@ -195,27 +221,33 @@ const stoppedNote = computed(() => {
   const last = says.value.at(-1)
   return `You stopped me ${done ? `after ${done} of ${plan.value.length} checks` : 'before I checked anything'}.${last ? ` I was at: “${last}”` : ''}`
 })
-const bubble = computed(() => (r.value.status === 'stopped' ? stoppedNote.value : v.value ? v.value.summary.replace(VERDICT_LEAD, '').replace(/^\p{Ll}/u, (c) => c.toUpperCase()) || v.value.summary : says.value.at(-1) ?? 'Reading the change…'))
-const bubbleLabel = computed(() => (r.value.status === 'stopped' ? 'Tess · stopped' : v.value ? 'Tess · what I found' : fail.value ? 'Tess · caught one' : live.value ? 'Tess · testing' : 'Tess'))
-const bubbleEdge = computed(() => (v.value && v.value.status !== 'pass' && r.value.status !== 'stopped' ? `inset 3px 0 0 ${v.value.status === 'fail' ? 'var(--bad)' : 'var(--warn)'}` : ''))
+const bubble = computed(() => (r.value.status === 'stopped' ? stoppedNote.value : v.value ? v.value.summary.replace(VERDICT_LEAD, '').replace(/^\p{Ll}/u, (c) => c.toUpperCase()) || v.value.summary : says.value.at(-1) ?? (isSetup.value ? 'Starting your app…' : 'Reading what you changed…')))
+// The summary shows two lines until you ask for more.
+const sumOpen = ref(false)
+const sumEl = ref<HTMLElement>()
+const sumLong = ref(false)
+const measure = () => { const el = sumEl.value; if (el && !sumOpen.value) sumLong.value = el.scrollHeight > el.clientHeight + 1 }
+watch(bubble, () => { sumOpen.value = false; nextTick(measure) })
+onMounted(() => nextTick(measure))
 
 // Checks, by who Tess tested as: problems first with their one fix, passes folded.
 const label = (k: string) => state.setup?.personas.find((x) => x.key === k)?.label ?? k
-const groups = computed(() => [...new Set(plan.value.map((p) => p.persona ?? ''))].map((k) => {
-  const all = plan.value.filter((p) => (p.persona ?? '') === k).sort((a, b) => (rank[a.status] ?? 3) - (rank[b.status] ?? 3))
+// Grouped as Tess planned them: what the change touches, then what must never break.
+const SOURCES: Record<string, string> = { diff: 'What you changed', 'must-never-break': 'Must never break' }
+const groups = computed(() => [...new Set(plan.value.map((p) => p.source ?? ''))].sort((a, b) => (a === 'diff' ? -1 : b === 'diff' ? 1 : 0)).map((k) => {
+  const all = plan.value.filter((p) => (p.source ?? '') === k).sort((a, b) => (rank[a.status] ?? 3) - (rank[b.status] ?? 3))
   const byWho = new Map<Persona | null, number>()
   for (const p of all.filter((x) => x.status === 'unverified')) { const w = blockedBy(p); byWho.set(w, (byWho.get(w) ?? 0) + 1) }
   const passed = all.filter((p) => p.status === 'pass')
   const gk = `${r.value.id}:${k}`
   const open = state.unfolded.has(gk) || (finished.value && passed.some((p) => p.name === state.sel.check)) || (!byWho.size && !all.some((x) => x.status === 'fail'))
-  return { k, gk, title: k ? label(k) : '', problems: all.filter((p) => p.status !== 'pass'), passed, open, fixes: [...byWho].map(([who, n]) => ({ who, n })), ok: passed.length, total: all.length }
+  return { k, gk, title: SOURCES[k] ?? (k ? label(k) : ''), problems: all.filter((p) => p.status !== 'pass'), passed, open, fixes: [...byWho].map(([who, n]) => ({ who, n })), ok: passed.length, total: all.length }
 }))
 // Why checks couldn't run when no sign-in is to blame: Tess's own note on the first one.
 const blockerNote = (g: { problems: PlanItem[] }) => {
   const p = g.problems.find((x) => x.status === 'unverified' && !blockedBy(x))
   return p ? (p.note || flows.value.find((f) => f.name === p.name)?.actual || '') : ''
 }
-const toggleFold = (gk: string) => { state.unfolded.has(gk) ? state.unfolded.delete(gk) : state.unfolded.add(gk) }
 const pick = (name: string) => { state.sel = { id: r.value.id, check: name, shot: 0 } }
 
 // ↑ ↓ move between checks and the screen follows; ← → step through a check's screenshots (in reading direction).
@@ -256,112 +288,102 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 
 <template>
   <section class="flex-1 min-w-0 min-h-0 flex flex-col">
-    <div class="shrink-0 px-6 py-4 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-[var(--line)]">
-      <p class="sr-only" role="status">{{ finished && v ? `${verdict.lead}${verdict.em}` : '' }}</p>
-      <h1 class="display selectable text-[26px] leading-tight font-medium text-balance">{{ verdict.lead }}<span v-if="verdict.em" :class="['italic', verdict.cls]">{{ verdict.em }}</span></h1>
-      <!-- What to do next: hand a problem to Claude Code, or run it again. -->
-      <div v-if="finished && r.change" class="flex gap-2 self-center">
-        <!-- Code problems go to Claude Code; when Tess never reached the app, running again is the fix. -->
-        <button :class="retryFirst ? 'btn-blue' : 'btn'" title="Run this test again (⌘R)" :disabled="!!state.setup?.running" @click="rerun()">Run again</button>
-        <button v-if="v && v.status !== 'pass' && r.status !== 'stopped'" :class="retryFirst ? 'btn' : 'btn-blue'" title="Copy the report for Claude Code (⇧⌘C)" @click="copyReport">{{ copied ? 'Copied' : 'Copy for Claude Code' }}</button>
-        <span class="sr-only" role="status">{{ copied ? 'Report copied' : '' }}</span>
-      </div>
-      <p class="text-[var(--muted)] flex flex-wrap gap-x-1.5" :title="v?.usage">
-        <template v-for="(m, i) in meta" :key="m.text"><span v-if="i" aria-hidden="true">·</span><span :class="m.cls">{{ m.text }}</span></template>
-      </p>
-      <!-- What this test was of, so you never have to recall it from the sidebar. -->
-      <p v-if="tested" class="basis-full -mt-2 text-[12px] text-[var(--muted)] selectable truncate" :title="tested">{{ tested }}</p>
-      <!-- While Tess works, Stop is right here, not only in the Test menu (⌘.). -->
-      <button v-if="live && state.setup?.running" class="btn self-center min-[880px]:order-last" title="Stop this test (⌘.)" @click="stopTest()">Stop</button>
-      <div v-if="live" class="w-full min-[880px]:w-[320px] min-[880px]:ms-auto self-center">
-        <div class="flex h-2 rounded-full overflow-hidden bg-[var(--sand)]" role="progressbar" aria-label="Checks done" :aria-valuemin="0" :aria-valuemax="plan.length" :aria-valuenow="plan.length - todo" :aria-valuetext="`${plan.length - todo} of ${plan.length} checks done`">
-          <span v-for="(b, i) in bar" :key="i" :class="['transition-[width] duration-300 ease-out', i === 3 && 'pulse']" :style="{ width: b.width, background: b.color }" />
+    <header class="shrink-0 px-7 pt-7 pb-6 border-b border-[var(--line)] flex flex-wrap items-start gap-x-8 gap-y-4">
+      <div class="flex-1 min-w-[320px]">
+        <p class="sr-only" role="status">{{ finished && v ? `${verdict.lead}${verdict.em}` : '' }}</p>
+        <div class="flex items-center gap-2.5 text-[12.5px] text-[var(--muted)] tabular-nums">
+          <span :class="['pill', { 'bg-[var(--ink)] text-white': pill.kind === 'done' || pill.kind === 'fail', 'ring-1 ring-inset ring-[var(--line-strong)] text-[var(--ink)]': pill.kind === 'live' || pill.kind === 'unk', 'bg-[var(--code)] text-[var(--muted)]': pill.kind === 'stopped' }]">
+            <span v-if="pill.kind === 'live'" class="tess size-3 rounded-full breathe" aria-hidden="true" />
+            <PhXCircle v-else-if="pill.kind === 'fail'" weight="fill" class="size-[13px] text-[#ff8a80]" aria-hidden="true" />
+            <PhCircleDashed v-else-if="pill.kind === 'unk'" class="size-[13px] text-[var(--faint)]" aria-hidden="true" />
+            {{ pill.text }}
+          </span>
+          <span class="selectable truncate" :title="v?.usage">{{ metaLine }}</span>
         </div>
-        <p class="mt-1.5 text-[12px] text-[var(--muted)]">{{ pass }} passed<template v-if="fail"> · <b class="text-[var(--bad)]">{{ fail }} broke</b></template><template v-if="unk"> · <b class="text-[var(--warn)]">{{ unk }} can't check</b></template> · {{ todo }} to go</p>
+        <h1 class="selectable mt-3 font-[family-name:var(--font-serif)] text-[28px] leading-[1.15] font-semibold tracking-[-0.015em] text-balance">{{ title }}</h1>
+        <!-- Tess, in her own words: the summary when she's done, her latest line while she works. -->
+        <!-- Two lines of Tess by default, so the header stays calm; More shows the rest. -->
+        <div class="mt-5 max-w-[46em] flex gap-3" aria-live="polite">
+          <span :class="['tess size-[22px] rounded-full shrink-0 mt-0.5', live && 'breathe']" aria-hidden="true" />
+          <div class="min-w-0">
+            <p :key="bubble" ref="sumEl" :class="['selectable rise text-[15px] leading-[1.6] text-[#333] text-pretty', !sumOpen && 'line-clamp-2']"><span class="sr-only">Tess: </span>{{ bubble }}</p>
+            <button v-if="sumLong" class="mt-1 text-[12.5px] font-medium text-[var(--muted)] hover:text-[var(--ink)]" :aria-expanded="sumOpen" @click="sumOpen = !sumOpen">{{ sumOpen ? 'Less' : 'More' }}</button>
+            <p v-if="r.change?.note" class="mt-1.5 text-[12.5px] text-[var(--muted)]">Your note: <span class="text-[var(--ink)]">{{ r.change.note }}</span></p>
+          </div>
+        </div>
       </div>
-      <p v-if="r.change?.note" class="basis-full text-[12px] text-[var(--muted)]">Your note: <span class="text-[var(--ink)]">{{ r.change.note }}</span></p>
+      <div class="flex gap-2 shrink-0 pt-px">
+        <button v-if="live && state.setup?.running" class="btn" title="Stop this test (⌘.)" @click="stopTest()"><PhStop class="size-4" aria-hidden="true" />Stop</button>
+        <template v-if="finished && r.change">
+          <button class="btn-blue" title="Run this test again (⌘R)" :disabled="!!state.setup?.running" @click="rerun()"><PhArrowClockwise class="size-4" aria-hidden="true" />{{ isSetup ? 'Set up again' : 'Test again' }}</button>
+          <button v-if="isSetup && v && pass && r.change?.source" class="btn" :disabled="!!state.setup?.running" @click="recheck">Run the checks again</button>
+          <button v-if="!isSetup && v" class="btn" title="Copy a report you can paste into Claude Code (⇧⌘C)" @click="copyReport"><PhCopy class="size-4" aria-hidden="true" />{{ copied ? 'Copied' : 'Copy report' }}</button>
+          <span class="sr-only" role="status">{{ copied ? 'Report copied' : '' }}</span>
+        </template>
+      </div>
+    </header>
+    <!-- Checks that couldn't run for lack of test data: Tess can create it, or it needs a person. -->
+    <div v-if="missing.length" class="shrink-0 mx-7 mt-5 rounded-2xl surface px-5 py-4 flex flex-wrap items-start gap-x-6 gap-y-3">
+      <div class="flex-1 min-w-[260px]">
+        <h2 class="font-medium">I couldn't run {{ blockedChecks === 1 ? 'one check' : `${blockedChecks} checks` }} because some test data is missing</h2>
+        <ul class="mt-1.5 flex flex-col gap-1 text-[13px]">
+          <li v-for="m in missing" :key="m.need" class="selectable">{{ m.need }}<span class="text-[var(--muted)]"> · {{ m.person ? "you'll need to set this up" : 'I can make this' }} · for {{ m.checks.length === 1 ? m.checks[0] : `${m.checks.length} checks` }}</span></li>
+        </ul>
+      </div>
+      <button v-if="missing.some((m) => !m.person)" class="btn-blue shrink-0" :disabled="!!state.setup?.running" title="Tess creates what's missing through the app, then you can run the checks again" @click="setUp">Make it for me</button>
     </div>
 
-    <div class="flex-1 min-h-0 flex flex-col overflow-y-auto min-[880px]:flex-row min-[880px]:overflow-visible">
-      <main id="evidence" class="flex-1 min-w-0 p-4 flex flex-col gap-3" aria-label="What Tess saw">
-        <div v-if="!noEvidence" :class="['relative rounded-2xl overflow-hidden surface flex flex-col', noEvidence ? 'shrink-0 h-28 bg-[var(--surface)]' : 'flex-1 min-h-[50vh] min-[880px]:min-h-0 bg-[var(--canvas)] text-zinc-900']">
-          <div class="h-8 shrink-0 bg-[var(--sand)] border-b border-[var(--line)] flex items-center px-3 text-[12px] text-[var(--muted)] gap-2 min-w-0">
-            <span v-if="live" class="size-1.5 rounded-full bg-rose-500 pulse shrink-0" />
-            <span class="truncate">{{ screen.label }}</span>
-            <!-- What Tess is doing right now, in the strip above the screen, never over the evidence. -->
-            <span v-if="live && chips.length" class="ms-auto shrink-0 flex items-center gap-1 rounded-full bg-[var(--surface)] px-2 py-0.5 text-[var(--ink)]"><ArrowPathIcon class="size-3.5 spin-slow" aria-hidden="true" />{{ chips.at(-1) }}</span>
-            <span v-if="live && failing" class="shrink-0 flex items-center gap-1 rounded-full bg-[var(--bad)] text-white px-2 py-0.5"><XMarkIcon class="size-3.5" aria-hidden="true" />{{ failing.note || failing.name }}</span>
-            <span v-if="asWho" class="shrink-0 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] px-2 py-0.5 text-[11px] font-medium">as {{ asWho }}</span>
-          </div>
-          <div class="relative flex-1 min-h-0">
-            <!-- Evidence crossfades between checks; the live screen swaps in place so it never flickers. -->
-            <Transition name="fade">
-              <img
-                v-if="screen.src" :key="live ? 'live' : screen.src" :src="screen.src" :alt="screen.alt" draggable="true"
-                class="absolute inset-0 size-full object-contain object-top cursor-zoom-in" title="Click or press Space to enlarge"
-                @click="zoomed = true" @contextmenu="evidenceMenu"
-              >
-              <p v-else key="empty" :class="['absolute inset-0 grid place-items-center px-6 text-center text-pretty', noEvidence ? 'text-[var(--muted)]' : 'text-zinc-500']">{{ screen.empty }}</p>
-            </Transition>
-          </div>
-        </div>
-        <!-- Tess speaks under the screen, never over the evidence. -->
-        <div class="shrink-0 flex items-end gap-3">
-          <div :class="['tess size-11 rounded-full shrink-0 shadow-md', live && 'breathe']" aria-hidden="true" />
-          <!-- One stable live region (so screen readers hear each new line); only its content re-animates. -->
-          <div class="flex-1 min-w-0 rounded-2xl rounded-es-sm bg-[var(--bubble)] text-[var(--bubble-fg)] px-5 py-3 shadow-sm max-w-3xl max-h-[28vh] overflow-y-auto" :style="{ boxShadow: bubbleEdge }" aria-live="polite">
-            <div :key="bubble" class="rise">
-              <p class="text-[12px] text-[var(--bubble-muted)] mb-0.5">{{ bubbleLabel }}</p>
-              <p class="display selectable text-[16px] leading-relaxed max-w-[68ch] text-pretty">{{ bubble }}</p>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      <aside class="w-full border-t min-[880px]:w-72 min-[880px]:border-t-0 min-[880px]:border-s shrink-0 border-[var(--line)] flex flex-col min-h-0" aria-label="Checks and log">
-        <div class="shrink-0 px-4 pt-3 flex gap-1 border-b border-[var(--line)]" role="tablist" aria-label="Checks or log" @keydown.left.right.stop.prevent="state.rail = state.rail === 'checks' ? 'log' : 'checks'; nextTick(() => document.getElementById(`tab-${state.rail}`)?.focus())">
-          <button
-            v-for="t in (['checks', 'log'] as const)" :id="`tab-${t}`" :key="t" role="tab" :aria-selected="state.rail === t" :aria-controls="`panel-${t}`" :tabindex="state.rail === t ? 0 : -1"
-            :class="['px-2.5 py-1.5 -mb-px border-b-2', state.rail === t ? 'border-[var(--accent)] font-medium' : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]']"
-            @click="state.rail = t"
-          >{{ t === 'checks' ? 'Checks' : 'Log' }}</button>
-        </div>
-        <div v-show="state.rail === 'checks'" id="panel-checks" ref="rail" role="tabpanel" aria-labelledby="tab-checks" class="flex-1 min-h-0 overflow-y-auto p-4">
+    <div class="flex-1 min-h-0 flex flex-col overflow-y-auto min-[880px]:flex-row min-[880px]:overflow-hidden">
+      <aside class="w-full min-[880px]:w-[400px] shrink-0 border-b min-[880px]:border-b-0 min-[880px]:border-e border-[var(--line)] flex flex-col min-h-0" aria-label="Checks and log">
+        <div v-show="state.rail === 'checks'" id="panel-checks" ref="rail" class="flex-1 min-h-0 overflow-y-auto px-5 pt-1 pb-6">
           <h2 class="sr-only">Checks</h2>
-          <p v-if="r.intro" class="pb-1 text-[13px] text-[var(--muted)] display italic">"{{ r.intro }}"</p>
-          <p v-if="!plan.length" class="text-[var(--muted)]">{{ live ? 'Tess is working out what to check…' : 'No checklist for this test.' }}</p>
-          <div v-for="g in groups" :key="g.gk" class="flex flex-col gap-0.5">
-            <div class="pt-3 pb-1 flex items-baseline justify-between gap-2">
-              <h3 v-if="g.title" class="font-semibold leading-snug">{{ g.title }}</h3><span v-else />
-              <span class="shrink-0 text-[var(--muted)]">{{ r.status === 'stopped' ? 'not checked' : `${g.ok} of ${g.total} passed` }}</span>
-            </div>
-            <TransitionGroup name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.problems" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
+          <p v-if="!plan.length" class="pt-4 text-[var(--muted)]">{{ live ? (isSetup ? 'Working out what test data to make…' : 'Deciding what to check…') : 'This test has no checks.' }}</p>
+          <div v-for="g in groups" :key="g.gk">
+            <h3 v-if="g.title" class="mt-5 mb-1 px-2.5 text-[12px] text-[var(--faint)]">{{ g.title }}</h3>
+            <TransitionGroup name="list" tag="ul" class="flex flex-col gap-2"><CheckRow v-for="p in [...g.problems, ...g.passed]" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
             <template v-for="f in g.fixes" :key="f.who?.key ?? '-'">
-              <!-- A missing sign-in is fixed in Settings; anything else gets Tess's own reason and a retry. -->
-              <button
-                v-if="f.who" class="mt-1.5 mb-1 self-stretch flex items-start gap-2 text-start rounded-lg bg-[var(--surface)] ring-1 ring-[var(--line)] text-[var(--ink)] px-3 py-1.5 text-[13px] font-medium hover:bg-[var(--page)]"
-                @click="openSettings()"
-              >
-                <span class="flex-1 text-pretty">Sign in as {{ shortLabel(f.who.label) }} to check {{ f.n === 1 ? 'this' : `these ${f.n}` }}</span>
-                <ArrowRightIcon class="size-4 shrink-0 mt-[3px] rtl:-scale-x-100" aria-hidden="true" />
+              <!-- A missing sign-in is fixed in Settings. -->
+              <button v-if="f.who" class="mt-2 w-full flex items-center gap-2 text-start rounded-[10px] surface px-3 py-2.5 text-[13px] font-medium hover:bg-[var(--row-hover)]" @click="openSettings()">
+                <span class="flex-1 text-pretty">Sign in as {{ shortLabel(f.who.label) }} so I can check {{ f.n === 1 ? 'this' : `these ${f.n}` }}</span>
+                <PhArrowRight class="size-4 shrink-0 rtl:-scale-x-100" aria-hidden="true" />
               </button>
-              <div v-else class="mt-1.5 mb-1 rounded-lg bg-[var(--surface)] ring-1 ring-[var(--line)] px-3 py-2 flex flex-col gap-1.5">
-                <p class="font-medium">{{ f.n }} check{{ plural(f.n) }} couldn't run</p>
-                <p v-if="blockerNote(g)" class="selectable text-[12px] text-[var(--muted)] text-pretty">{{ blockerNote(g) }}</p>
-              </div>
-            </template>
-            <template v-if="g.passed.length">
-              <button class="mt-1 py-1 text-start text-[13px] text-[var(--muted)] hover:text-[var(--ink)] flex gap-2" :aria-expanded="g.open" @click="toggleFold(g.gk)"><ChevronDownIcon :class="['size-4 mt-0.5 transition-[rotate] duration-150', g.open && 'rotate-180']" aria-hidden="true" /> {{ g.passed.length }} passed</button>
-              <Transition name="reveal"><TransitionGroup v-if="g.open" name="list" tag="ul" class="flex flex-col"><CheckRow v-for="p in g.passed" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup></Transition>
+              <p v-else-if="blockerNote(g)" class="mt-2 px-2.5 selectable text-[12.5px] text-[var(--muted)] text-pretty">{{ blockerNote(g) }}</p>
             </template>
           </div>
-          <ul v-if="finished && others.length" class="mt-3 flex flex-col"><CheckRow :item="{ name: OTHER, status: 'pass' }" :label="`Other screenshots (${others.length})`" :finished="finished" :shots="others.length" @pick="pick" /></ul>
+          <ul v-if="finished && others.length" class="mt-5 flex flex-col gap-2"><CheckRow :item="{ name: OTHER, status: 'pass' }" :label="`Other screenshots (${others.length})`" :finished="finished" :shots="others.length" @pick="pick" /></ul>
+          <button v-if="r.steps.length" class="mt-5 ms-1 btn-plain h-7 text-[12.5px] text-[var(--muted)]" @click="state.rail = 'log'">See every step</button>
         </div>
-        <div v-show="state.rail === 'log'" id="panel-log" role="tabpanel" aria-labelledby="tab-log" class="selectable flex-1 min-h-0 overflow-y-auto bg-[var(--log)] text-[var(--log-fg)] p-4 mono text-[11px] leading-5">
+        <div v-show="state.rail === 'log'" id="panel-log" class="selectable flex-1 min-h-0 overflow-y-auto px-5 pt-2 pb-6 text-[12px] leading-5">
+          <button class="mb-2 -ms-1 btn-plain h-7 text-[12.5px] text-[var(--muted)]" @click="state.rail = 'checks'">Back to checks</button>
           <h2 class="sr-only">Log</h2>
-          <p v-for="(s, i) in r.steps" :key="i" :class="s.startsWith('say: ') ? 'text-[var(--log-say)] font-sans text-[13px] my-1' : 'text-[var(--log-fg)]/70 break-all'">{{ s.startsWith('say: ') ? `Tess  ${s.slice(5)}` : `·  ${s.slice(4)}` }}</p>
+          <p v-for="(s, i) in r.steps" :key="i" :class="s.startsWith('say: ') ? 'text-[var(--ink)] text-[13px] my-1.5' : 'text-[var(--muted)] break-all'">{{ s.startsWith('say: ') ? s.slice(5) : `·  ${s.slice(4)}` }}</p>
         </div>
       </aside>
+
+      <main id="evidence" class="flex-1 min-w-0 min-h-0 overflow-y-auto px-7 py-5 flex flex-col gap-3" aria-label="What Tess saw">
+        <div class="flex items-baseline justify-between gap-4">
+          <h2 class="font-[family-name:var(--font-serif)] text-[20px] leading-tight font-semibold">{{ live ? 'Live' : (state.sel.check ? what : 'Evidence') }}</h2>
+          <span v-if="live && r.live && r.live.url !== 'about:blank'" class="flex items-center gap-1.5 text-[12.5px] text-[var(--muted)] truncate"><PhGlobeSimple class="size-4 shrink-0" aria-hidden="true" />{{ r.live.url.replace(/^https?:\/\/[^/]+/, '') || '/' }}</span>
+          <span v-else-if="!live && selFlow?.url && screen.src" class="flex items-center gap-1.5 text-[12.5px] text-[var(--muted)] truncate selectable"><PhGlobeSimple class="size-4 shrink-0" aria-hidden="true" />{{ selFlow.url }}</span>
+        </div>
+        <p v-if="live && (chips.length || asWho)" class="flex flex-wrap gap-2 text-[12.5px] text-[var(--muted)]">
+          <span v-if="chips.length" class="flex items-center gap-1.5"><PhArrowClockwise class="size-3.5 spin-slow" aria-hidden="true" />{{ chips.at(-1) }}</span>
+          <span v-if="asWho">as {{ asWho }}</span>
+          <span v-if="failing" class="flex items-center gap-1.5 text-[var(--ink)]"><PhXCircle weight="fill" class="size-3.5 text-[var(--bad)]" aria-hidden="true" />{{ failing.note || failing.name }}</span>
+        </p>
+        <!-- The screenshot as a card: the whole page, lifted; crossfades between checks. -->
+        <Transition name="fade" mode="out-in">
+          <figure v-if="screen.src" :key="live ? 'live' : screen.src" class="m-0 rounded-2xl overflow-hidden lifted bg-white shrink-0">
+            <img :src="screen.src" :alt="screen.alt" draggable="true" class="block w-full h-auto cursor-zoom-in" title="Click or press Space to enlarge" @click="zoomed = true" @contextmenu="evidenceMenu">
+          </figure>
+          <p v-else key="empty" class="rounded-2xl surface px-6 py-10 text-center text-[var(--muted)] text-pretty">{{ screen.empty }}</p>
+        </Transition>
+        <p v-if="!live && mine.length > 1" class="text-[12.5px] text-[var(--muted)] tabular-nums">Screenshot {{ state.sel.shot + 1 }} of {{ mine.length }} · ← →</p>
+        <p v-if="!live && saw" class="selectable text-[14px] leading-[1.55] text-[#333] text-pretty"><b class="font-semibold text-[var(--ink)]">What I saw:</b> {{ saw }}</p>
+        <template v-if="!live && selFlow && selFlow.status !== 'pass'">
+          <p v-if="selFlow.expected" class="selectable text-[13px] text-[var(--muted)]">Expected: {{ selFlow.expected }}</p>
+        </template>
+      </main>
     </div>
     <!-- Full-size evidence: Space or Esc closes, ← → still step through the check's screenshots. -->
     <Transition name="fade">

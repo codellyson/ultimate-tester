@@ -2,10 +2,10 @@
 // The profile Markdown as a readable card: one row per section, each editable in place.
 const props = defineProps<{ profile: string, basic?: boolean }>()
 const { state, setupAction } = useTester()
-const LABELS: [string, string][] = [['Start', 'Start the app'], ['Allowed URLs', 'Where I may go'], ['Test accounts', 'Signs in as'], ['Personas', 'Personas'], ['Must never break', 'Must never break'], ['Existing checks', 'Tests to run'], ['Notes for Tess', 'Always keep in mind'], ['Lessons', "What you've taught me"]]
+const LABELS: [string, string][] = [['Start', 'Start the app'], ['Allowed URLs', 'Allowed URLs'], ['Test accounts', 'Accounts'], ['Personas', 'Personas'], ['Must never break', 'Must never break'], ['Existing checks', 'Tests to run'], ['Notes for Tess', 'Notes for Tess'], ['Lessons', 'Corrections']]
 // Shown even when missing, so there is always a place to tell Tess things.
 const ALWAYS = new Set(['Notes for Tess', 'Lessons'])
-const EMPTY: Record<string, string> = { 'Notes for Tess': 'Nothing yet. Tell me what to focus on, skip, or watch out for.', Lessons: 'Nothing yet. When I get a check wrong, tell me from the result and it lands here.' }
+const EMPTY: Record<string, string> = { 'Notes for Tess': 'None. Add what Tess should focus on, skip or watch for.', Lessons: 'None. When Tess gets a check wrong, correct her from the result and it is saved here.' }
 
 const sections = computed(() => {
   const out: Record<string, string> = {}

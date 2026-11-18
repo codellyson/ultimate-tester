@@ -29,6 +29,11 @@
         ],
         "createdAt": "2026-11-16T05:08:30.819Z",
         "reason": "Claude: outer box is a simulated Mac window frame in a throwaway mock, not a card"
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "createdAt": "2026-11-18T04:31:35.639Z"
       }
     ]
   }

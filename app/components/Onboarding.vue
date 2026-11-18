@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { CheckIcon, PlusIcon } from '@heroicons/vue/16/solid'
-import { CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon } from '@heroicons/vue/20/solid'
+import { PhCheckCircle as CheckCircleIcon, PhCheck as CheckIcon, PhWarningCircle as ExclamationTriangleIcon, PhPlus as PlusIcon, PhXCircle as XCircleIcon } from '@phosphor-icons/vue'
 // First run for an app: welcome, Tess reads the repo, you check her plan, sign her in, choose when she tests, first test.
 const { state, api, addApp, addSample, setupAction, startTest, show, selectApp, leaveDraft, tauri } = useTester()
 const s = computed(() => state.setup)
@@ -63,7 +62,7 @@ async function begin() {
   if (ok) await startTest(targets.value[target.value]!)
   starting.value = false
 }
-async function skip() { if (state.appId && (await setupAction('onboarded'))) show('setup') }
+async function skip() { if (state.appId && (await setupAction('onboarded'))) show('app') }
 </script>
 
 <template>
@@ -79,7 +78,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
             :aria-current="i === step ? 'step' : undefined" :aria-label="canGoBack(i) ? `Back to ${name}` : undefined"
             @click="canGoBack(i) && go(i)"
           >
-            <b :class="['transition-colors duration-200 size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ok)] text-white' : i === step ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] ring-1 ring-[var(--line)]']"><CheckIcon v-if="i < step" class="size-3" aria-hidden="true" /><template v-else>{{ i + 1 }}</template></b>
+            <b :class="['transition-colors duration-200 size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ink)] text-white' : i === step ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] ring-1 ring-[var(--line)]']"><CheckIcon v-if="i < step" class="size-3" aria-hidden="true" /><template v-else>{{ i + 1 }}</template></b>
             <span class="hidden md:inline">{{ name }}</span>
           </component>
         </li>
@@ -98,7 +97,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
         <div class="grid sm:grid-cols-3 gap-3">
           <div class="rounded-2xl bg-[var(--surface)] surface p-4 flex flex-col gap-1.5"><b class="font-semibold">I run it</b><span class="text-[var(--muted)]">I start your app on my own port and click through it in a real browser.</span></div>
           <div class="rounded-2xl bg-[var(--surface)] surface p-4 flex flex-col gap-1.5"><b class="font-semibold">I sign in as your users</b><span class="text-[var(--muted)]">Owners, staff, shoppers. Each sees different things, so I test as each.</span></div>
-          <div class="rounded-2xl bg-[var(--surface)] surface p-4 flex flex-col gap-1.5"><b class="font-semibold">You get one answer</b><span class="text-[var(--muted)]">Safe to push, or not, with a screenshot for every check.</span></div>
+          <div class="rounded-2xl bg-[var(--surface)] surface p-4 flex flex-col gap-1.5"><b class="font-semibold">You get one answer</b><span class="text-[var(--muted)]">Each check passed, broke, or couldn't run, with a screenshot.</span></div>
         </div>
         <ul class="rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)]" aria-label="Is this Mac ready">
           <li v-if="!pre" class="px-4 py-2.5 text-[var(--muted)]">Checking this Mac…</li>
@@ -173,7 +172,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
             <button class="btn-blue" :disabled="!!s.signingIn" @click="go(4)">Continue</button>
             <button v-if="needs.length" class="link" @click="go(4)">Do the rest later</button>
           </div>
-          <p v-if="needs.length" class="text-[12px] text-[var(--muted)]">Anyone you skip shows as “can't check” in results, with a one-click sign-in.</p>
+          <p v-if="needs.length" class="text-[12px] text-[var(--muted)]">Anyone you skip shows up as “couldn't run” in results, with a button to sign in.</p>
         </div>
       </template>
 

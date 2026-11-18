@@ -13,6 +13,7 @@ export default defineEventHandler(async (event) => {
       case 'lesson': a.addLesson(body.text, body.check); break
       case 'notes': a.setNotes(body.text); break
       case 'trigger': a.setTrigger(body.mode); break
+      case 'hook': a.setHook(body.which, !!body.on); break
       case 'onboarded': a.finishOnboarding(); break
       default: throw createError({ statusCode: 404, statusMessage: 'not found' })
     }

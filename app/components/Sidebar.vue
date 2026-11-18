@@ -28,7 +28,7 @@ function outcome(r: RunInfo) {
   if (r.status === 'pass') return 'Passed'
   if (r.status === 'fail') return `${c?.fail || 'Some'} broke`
   if (!r.shotCount) return "Couldn't reach app"
-  return `${c?.unk || 'Some'} can't check`
+  return `${c?.unk || 'Some'} couldn't run`
 }
 const current = computed(() => (state.view === 'run' ? state.runId : null))
 const open = (r: RunInfo) => openRun(r.id, r.id === state.runs[0]?.id)

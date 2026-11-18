@@ -25,7 +25,7 @@ Opens the Ultimate Tester window on **Set up & run**: Tess drafts the profile fr
 node /path/to/ultimate-tester/bin/ultimate-tester.js install
 ```
 
-This writes `.ultimate-tester.md` (fill it in), adds `.ultimate-tester/` to `.gitignore`, adds a Claude Code `Stop` hook to `.claude/settings.json`, and adds a background run to `.git/hooks/post-commit`.
+This writes `.ultimate-tester.md` (fill it in), adds `.ultimate-tester/` to `.gitignore`, and adds a Claude Code `Stop` hook to `.claude/settings.local.json`. To also test after every commit, run `install commit`, which adds a background run to `.git/hooks/post-commit`. `uninstall stop` or `uninstall commit` removes one; `uninstall` removes both. Settings (⌘,) has the same switches.
 
 Run by hand:
 

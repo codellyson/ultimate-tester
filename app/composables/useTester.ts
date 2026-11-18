@@ -1,15 +1,16 @@
 // All of the window's state and its talk with the engine, shared by every component.
 import type { Target } from '~/utils/format'
 
-export type App = { id: string, name: string, root: string, profileReady: boolean, signedIn: boolean, running: boolean, last: RunInfo | null }
+export type App = { id: string, name: string, root: string, profileReady: boolean, signedIn: boolean, onboarded: boolean, running: boolean, last: RunInfo | null }
 export type RunInfo = { id: string, status: string, summary: string, title: string, kind?: string | null, target?: string | null, note?: string, counts?: { pass: number, fail: number, unk: number }, shotCount?: number }
 export type PlanItem = { name: string, why?: string, source?: string, status: string, note?: string, persona?: string }
-export type Flow = { name: string, status: string, steps?: string[], expected?: string, actual?: string, evidence?: string[], persona?: string }
+export type Flow = { name: string, status: string, steps?: string[], expected?: string, actual?: string, evidence?: string[], url?: string, persona?: string, needs?: string, setupBy?: 'tess' | 'person' }
 export type Verdict = { status: string, summary: string, flows: Flow[], durationMs?: number, usage?: string }
 export type RunDetail = RunInfo & {
-  plan: PlanItem[] | null, planUnreadable: boolean, intro: string, change: { message: string, files: string[], mode: string, note?: string, kind?: string, target?: string | null } | null,
+  plan: PlanItem[] | null, planUnreadable: boolean, intro: string, change: { message: string, files: string[], mode: string, note?: string, kind?: string, target?: string | null, source?: { id: string, kind: string, target: string | null, note: string, checks: string[] } } | null,
   live: { url: string } | null, typicalMs: number | null, steps: string[], verdict: Verdict | null, shots: string[]
 }
+export type General = { model: 'opus' | 'sonnet', timeoutMin: number, notifications: boolean }
 export type Persona = { key: string, label: string, signIn: boolean, savedAt: string | null }
 export type Setup = {
   profile: string, profileHash: string, profileReady: boolean, onboarded: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
@@ -22,7 +23,7 @@ export const OTHER = '__other__'
 const state = reactive({
   apps: [] as App[],
   appId: null as string | null,
-  view: null as 'setup' | 'run' | 'onboard' | null,
+  view: null as 'app' | 'setup' | 'run' | 'onboard' | null,
   runId: null as string | null,
   follow: true,
   runs: [] as RunInfo[],
@@ -42,9 +43,12 @@ const state = reactive({
   cmdk: false,
   note: '', // extra instructions for the next test only
   sheet: false, // the "Test a commit or range" sheet
-  sidebar: true,
+  sidebar: false, // DESIGN.md: history lives behind the History button; View > Show Sidebar still brings it back
   roomy: true, // the window is wide enough for the sidebar
   inSettings: false, // this page is the Settings window
+  home: false, // the Home screen (all apps) is showing
+  settingsTab: 'app' as 'general' | 'app', // which Settings tab is open
+  general: { model: 'opus', timeoutMin: 12, notifications: true } as General, // app-wide settings, from the engine
   booted: false, // the app list has loaded once; until then nothing renders (no Welcome flash)
 })
 
@@ -56,14 +60,14 @@ type Tauri = {
   notification?: { isPermissionGranted: () => Promise<boolean>, requestPermission: () => Promise<string>, sendNotification: (o: { title: string, body?: string }) => void }
   menu?: { Menu: { new: (o: { items: { text: string, action?: () => void, enabled?: boolean }[] }) => Promise<{ popup: () => Promise<void> }> }, PredefinedMenuItem: unknown }
   opener?: { revealItemInDir: (path: string) => Promise<void> }
-  window?: { getCurrentWindow: () => { setBadgeLabel: (l?: string) => Promise<void>, listen: (n: string, cb: () => void) => Promise<unknown> } }
+  window?: { getCurrentWindow: () => { setBadgeLabel: (l?: string) => Promise<void>, listen: (n: string, cb: () => void) => Promise<unknown>, setTheme?: (t: 'light' | 'dark' | null) => Promise<void> } }
   core?: { invoke: (cmd: string, args?: object) => Promise<unknown> }
   webviewWindow?: { WebviewWindow: { getByLabel: (l: string) => Promise<{ show: () => Promise<void>, setFocus: () => Promise<void> } | null> } & (new (label: string, o: object) => unknown) }
 }
 export const tauri = () => (globalThis as unknown as { __TAURI__?: Tauri }).__TAURI__
 
-async function api<T>(path: string, body?: unknown): Promise<T> {
-  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => { throw new Error(OFFLINE) })
+async function api<T>(path: string, body?: unknown, method?: 'DELETE'): Promise<T> {
+  const r = await fetch(path, method ? { method } : body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => { throw new Error(OFFLINE) })
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(j.statusMessage || j.message || 'Something went wrong')
   return j as T
@@ -81,12 +85,13 @@ async function loadApps() {
     if (bootDone && !state.appId && apps[0]) selectApp(apps[0].id)
   }
   if (!state.inSettings) announce(apps)
+  api<General>('/api/settings').then((g) => { if (!same(g, state.general)) state.general = g }).catch(() => {})
 }
 
 // When a test finishes while you're elsewhere: a notification, and a Dock badge until you come back.
 const lastSeen = new Map<string, string>()
 let unseenProblems = false
-const VERDICT: Record<string, string> = { pass: 'Safe to push', fail: "Don't push yet", unverified: "Couldn't check everything", stopped: 'Test stopped' }
+const VERDICT: Record<string, string> = { pass: 'All checks passed', fail: 'Something broke', unverified: "Some checks couldn't run", stopped: 'Test stopped' }
 async function announce(apps: App[]) {
   const t = tauri()
   for (const a of apps) {
@@ -97,7 +102,7 @@ async function announce(apps: App[]) {
     const [id, status] = before.split('|')
     if (status !== 'running' || id !== a.last.id || document.hasFocus()) continue
     if (a.last.status !== 'pass') unseenProblems = true
-    if (t?.notification && (await t.notification.isPermissionGranted() || (await t.notification.requestPermission()) === 'granted')) {
+    if (state.general.notifications && t?.notification && (await t.notification.isPermissionGranted() || (await t.notification.requestPermission()) === 'granted')) {
       t.notification.sendNotification({ title: `${VERDICT[a.last.status] ?? 'Test finished'} · ${a.name}`, body: (a.last.summary || short(a.last.title)).slice(0, 180) })
     }
   }
@@ -117,7 +122,8 @@ async function refresh() {
     if (!same(setup, state.setup)) state.setup = setup
     if (!same(runs, state.runs)) state.runs = runs
     if (state.follow) state.runId = runs[0]?.id ?? null
-    if (!state.view) state.view = state.inSettings ? 'setup' : !setup.onboarded ? 'onboard' : !setup.profileReady || (!setup.allSignedIn && !runs.length) ? 'setup' : runs[0] ? 'run' : 'setup'
+    // Opening an app shows its page; a brand-new app goes through getting started first.
+    if (!state.view) state.view = state.inSettings ? 'setup' : !setup.onboarded && !runs.length ? 'onboard' : 'app'
     if (state.view === 'run' && state.runId) {
       const d = await api<RunDetail>(`/api/apps/${id}/runs/${state.runId}`)
       if (!same(d, state.detail)) state.detail = d
@@ -134,10 +140,7 @@ const LAST_APP = 'ut.lastApp'
 // Before anything replaces the screen: an unsaved profile edit is never dropped without asking.
 async function leaveDraft() {
   if (!state.draftDirty) return true
-  const ask = tauri()?.dialog?.ask
-  const ok = ask
-    ? await ask('You have unsaved changes to how Tess tests this app.', { title: 'Discard your edit?', kind: 'warning', okLabel: 'Discard', cancelLabel: 'Keep Editing' })
-    : confirm('Discard your unsaved changes to how Tess tests this app?')
+  const ok = await askConfirm({ title: 'Discard your edit?', message: 'You have unsaved changes to how Tess tests this app.', okLabel: 'Discard', danger: true })
   if (ok) state.draftDirty = false
   return ok
 }
@@ -145,14 +148,15 @@ async function leaveDraft() {
 async function selectApp(id: string) {
   if (!(await leaveDraft())) return
   if (!state.inSettings) try { localStorage.setItem(LAST_APP, id) } catch {}
-  Object.assign(state, { appId: id, runId: null, follow: true, setup: null, detail: null, plan: [], view: null })
+  Object.assign(state, { home: false, appId: id, runId: null, follow: true, setup: null, detail: null, plan: [], view: null })
   history.replaceState(null, '', `?app=${id}`)
   refresh()
 }
 
-async function show(v: 'setup' | 'run' | 'onboard') {
+async function show(v: 'app' | 'setup' | 'run' | 'onboard') {
   if (v !== state.view && !(await leaveDraft())) return
   state.view = v
+  state.home = false
   // Only Setup is kept in the URL; onboarding is decided by the app's state, so a reload never lands in it.
   history.replaceState(null, '', `?app=${state.appId}${v === 'setup' ? '&view=setup' : ''}`)
   refresh()
@@ -190,8 +194,16 @@ async function stopTest() {
 }
 
 // Settings is its own window in the Mac app (⌘,); in a browser it is the Setup page.
-async function openSettings() {
+// General settings are saved by the engine, so the CLI (model, time limit) and both windows use the same values.
+async function saveGeneral(patch: Partial<General>) {
+  try { state.general = await api<General>('/api/settings', patch) } catch (e) { state.flash = (e as Error).message }
+}
+
+// tab: which Settings tab to show; null keeps the one used last (⌘,).
+const TAB = 'ut-settings-tab'
+async function openSettings(tab: 'general' | 'app' | null = 'app') {
   state.menu = null
+  if (tab) try { localStorage.setItem(TAB, tab) } catch {}
   const invoke = tauri()?.core?.invoke
   if (!invoke || !state.appId) return show('setup')
   try { await invoke('open_settings', { appId: state.appId }) } catch (e) { state.flash = String(e) }
@@ -199,7 +211,7 @@ async function openSettings() {
 
 function onMenu(id: string) {
   const act: Record<string, () => void> = {
-    'settings': openSettings,
+    'settings': () => openSettings(null),
     'new-test': () => { if (state.appId && state.view !== 'onboard') state.menu = 'new' },
     'add-app': addApp,
     'rerun': rerun,
@@ -219,7 +231,7 @@ function onMenu(id: string) {
 async function addApp() {
   state.menu = null
   const t = tauri()
-  const path = t?.dialog ? await t.dialog.open({ directory: true, title: "Choose your app's repo folder" }) : prompt("Path to your app's repo folder")
+  const path = t?.dialog ? await t.dialog.open({ directory: true, title: "Choose your app's repo folder" }) : await askText({ title: 'Add an app', message: "The folder of your app's git repo.", okLabel: 'Add', input: { placeholder: '~/code/my-app' } })
   if (!path) return
   try { const a = await api<App>('/api/apps', { path }); await loadApps(); selectApp(a.id) } catch (e) { state.flash = (e as Error).message }
 }
@@ -263,7 +275,10 @@ async function boot() {
   if (state.inSettings) {
     // Settings stays loaded while hidden, so it re-reads the profile every time it is shown or focused.
     // Never switch apps under an unsaved edit; the person finishes or cancels it first.
+    const readTab = () => { try { state.settingsTab = localStorage.getItem(TAB) === 'general' ? 'general' : 'app' } catch {} }
+    readTab()
     t?.event?.listen('settings-app', (e) => {
+      readTab()
       if (e.payload && e.payload !== state.appId && state.draftDirty) { state.flash = 'Finish or cancel your edit to switch Settings to another app.'; return }
       if (e.payload && e.payload !== state.appId) selectApp(e.payload); else refresh()
     })
@@ -282,6 +297,8 @@ async function boot() {
     }))
     watch(menuState, (m) => { t.core?.invoke('set_menu_state', m).catch(() => {}) }, { immediate: true })
   }
+  // Home has no app in its address, so a reload comes back to Home.
+  if (!state.inSettings) watch(() => state.home, (h) => { if (h) history.replaceState(null, '', '/') })
   if (!state.inSettings) {
     t?.event?.listen('menu', (e) => onMenu(e.payload))
     window.addEventListener('focus', () => { unseenProblems = false; announce(state.apps) })
@@ -301,11 +318,14 @@ async function boot() {
   setInterval(() => loadApps().catch(() => {}), 5000)
   bootDone = true
   if (!state.appId) return
-  selectApp(state.appId)
+  // The main window opens on Home, with the last app loaded behind it, unless a link names an app.
+  const home = !state.inSettings && !params.get('app')
+  await selectApp(state.appId)
+  if (home) state.home = true
   const v = params.get('view')
   if (v === 'setup') show(v)
 }
 
 export function useTester() {
-  return { state, tauri, leaveDraft, api, refresh, loadApps, selectApp, show, openRun, startTest, rerun, stopTest, openSettings, addApp, addSample, setupAction, boot }
+  return { state, tauri, saveGeneral, leaveDraft, api, refresh, loadApps, selectApp, show, openRun, startTest, rerun, stopTest, openSettings, addApp, addSample, setupAction, boot }
 }

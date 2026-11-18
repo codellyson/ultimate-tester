@@ -12,6 +12,8 @@ export default defineNuxtConfig({
       title: 'Ultimate Tester',
       htmlAttrs: { lang: 'en' },
       meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1' }],
+      // Appearance before first paint (dark unless chosen otherwise), so the window never flashes light.
+      script: [{ innerHTML: "try{var m=localStorage.getItem('ut-appearance')||'light';if(m!=='system')document.documentElement.dataset.theme=m}catch(e){document.documentElement.dataset.theme='light'}" }],
     },
   },
 })

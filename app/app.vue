@@ -18,7 +18,7 @@ function onKey(e: KeyboardEvent) {
 // Like Mac apps, the sidebar steps aside when the window is too narrow for it and the evidence.
 const roomy = ref(true)
 onMounted(() => { const q = matchMedia('(min-width: 1080px)'); roomy.value = state.roomy = q.matches; q.addEventListener('change', (e) => { roomy.value = state.roomy = e.matches }) })
-const showSidebar = computed(() => !state.inSettings && !!state.appId && state.sidebar && roomy.value && (state.view === 'run' || state.view === 'setup'))
+const showSidebar = computed(() => !state.inSettings && !state.home && !!state.appId && state.sidebar && roomy.value && (state.view === 'run' || state.view === 'setup'))
 const closeMenus = () => { state.menu = null }
 onMounted(() => { window.addEventListener('keydown', onKey); document.addEventListener('click', closeMenus) })
 onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); document.removeEventListener('click', closeMenus) })
@@ -37,13 +37,17 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); document.r
     <Sidebar v-if="showSidebar" />
     <Transition name="view" mode="out-in">
     <div v-if="!state.booted" key="boot" class="flex-1 bg-[var(--page)]" />
+    <GeneralSettings v-else-if="state.inSettings && state.settingsTab === 'general'" key="general" />
     <Onboarding v-else-if="!state.appId" key="welcome" />
+    <HomeView v-else-if="state.home && !state.inSettings" key="home" />
     <Onboarding v-else-if="state.view === 'onboard' && state.setup" :key="state.appId" />
+    <AppView v-else-if="state.view === 'app' && state.setup" :key="`app-${state.appId}`" />
     <SetupView v-else-if="state.view === 'setup' && state.setup" />
     <RunView v-else-if="state.view === 'run' && state.detail" :key="state.runId ?? 'run'" />
     <div v-else key="wait" class="flex-1 min-w-0" aria-busy="true" />
     </Transition>
     </div>
     <template v-if="!state.inSettings"><CommandPalette /><CustomTestSheet /></template>
+    <AskSheet />
   </div>
 </template>

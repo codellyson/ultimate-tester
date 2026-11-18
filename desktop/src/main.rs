@@ -44,10 +44,7 @@ fn engine_status() -> &'static str {
 
 // Starts the Node engine through the user's own shell, interactive and login (-ilc), so it gets the same
 // PATH as their Terminal: nvm, fnm and volta set Node up in .zshrc, which a login-only shell skips.
-fn spawn_engine() -> Option<Child> {
-    let cli = option_env!("ULTIMATE_TESTER_CLI")
-        .map(String::from)
-        .unwrap_or_else(|| format!("{}/../bin/ultimate-tester.js", env!("CARGO_MANIFEST_DIR")));
+fn spawn_engine(cli: &str) -> Option<Child> {
     let shell = std::env::var("SHELL").ok().filter(|s| s.starts_with('/')).unwrap_or_else(|| "/bin/zsh".into());
     Command::new(shell)
         .args(["-ilc", &format!("exec node {:?} serve", cli)])
@@ -58,14 +55,14 @@ fn spawn_engine() -> Option<Child> {
 
 // Keeps an engine running for as long as the app is open: one that was already up may stop
 // (another copy quitting, a restart), and then the app starts its own.
-fn watch_engine(slot: Arc<Mutex<Option<Child>>>) {
+fn watch_engine(slot: Arc<Mutex<Option<Child>>>, cli: String) {
     thread::spawn(move || loop {
         // Start ours only when the port is free; never fight another program for it.
         if engine_port() == Port::Free {
             let mut child = slot.lock().unwrap();
             let ours_alive = child.as_mut().map(|c| matches!(c.try_wait(), Ok(None))).unwrap_or(false);
             if !ours_alive {
-                *child = spawn_engine();
+                *child = spawn_engine(&cli);
             }
         }
         thread::sleep(Duration::from_secs(2));
@@ -174,6 +171,7 @@ fn set_menu_state(app: tauri::AppHandle, new_test: bool, rerun: bool, stop: bool
 fn build_settings(app: &tauri::AppHandle) -> tauri::Result<()> {
     tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html?view=setup&window=settings".into()))
         .title("Settings")
+        .theme(Some(tauri::Theme::Light))
         .inner_size(820.0, 720.0)
         .min_inner_size(640.0, 480.0)
         .title_bar_style(tauri::TitleBarStyle::Overlay)
@@ -238,7 +236,7 @@ fn show_main(app: &tauri::AppHandle) {
 
 fn main() {
     let slot = Arc::new(Mutex::new(None));
-    watch_engine(slot.clone());
+    let watched = slot.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
@@ -247,7 +245,15 @@ fn main() {
         .manage(Testing(AtomicBool::new(false)))
         .manage(Draft(AtomicBool::new(false)))
         .invoke_handler(tauri::generate_handler![open_settings, set_menu_state, engine_status, set_draft])
-        .setup(|app| {
+        .setup(move |app| {
+            // The engine shipped inside the app; a dev build without it runs the repo's copy.
+            let cli = app.path().resource_dir().ok()
+                .map(|d| d.join("engine/bin/ultimate-tester.js"))
+                .filter(|p| p.exists())
+                .map(|p| p.to_string_lossy().into_owned())
+                .or_else(|| option_env!("ULTIMATE_TESTER_CLI").map(String::from))
+                .unwrap_or_else(|| format!("{}/../bin/ultimate-tester.js", env!("CARGO_MANIFEST_DIR")));
+            watch_engine(watched.clone(), cli);
             let (menu, handles) = build_menu(app.handle())?;
             app.set_menu(menu)?;
             app.manage(handles);

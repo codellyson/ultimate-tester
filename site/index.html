@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ultimate Tester · Tess tests every change before you push</title>
+  <meta name="description" content="A Mac app for developers who ship with Claude Code. After every change, Tess opens your app in a real browser, uses it like a tester, and shows you what broke, with screenshots.">
+  <link rel="icon" href="/icon.png">
+  <link rel="preload" href="/fonts/newsreader-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav">
+    <a class="brand" href="/"><span class="orb" aria-hidden="true"></span>Ultimate Tester</a>
+    <nav class="links" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#proof">Evidence</a>
+    </nav>
+    <a class="pill" href="#download">Download for Mac</a>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <h1>An AI tester for<br><em>“I’ll test it later”</em> developers</h1>
+      <p class="sub">When Claude Code finishes a task, Tess opens your app in a real browser and uses it the way a person would, with <a class="mark" href="#proof">a screenshot for every check&nbsp;→</a> so you know before you push.</p>
+      <a class="pill pill-lg" href="#download">Download for Mac</a>
+      <p class="works">Works with <span class="chip"><i class="dot dot-claude"></i>Claude Code</span><span class="chip"><i class="dot dot-chrome"></i>Chrome</span><span class="chip"><i class="dot dot-git"></i>git</span></p>
+    </section>
+
+    <!-- Real screenshots of Ultimate Tester testing Passalong (commit 03d69e9, billing). -->
+    <figure class="stage">
+      <img class="shot-hero" src="/shots/hero.webp" width="2200" height="1440" alt="Tess testing a billing change in Passalong: the live Plan settings page, her checks, and her note on what the page says.">
+    </figure>
+
+    <section id="how" class="step">
+      <p class="step-n">Step 1</p>
+      <h2>Claude Code finishes <span class="orb orb-h" aria-hidden="true"></span></h2>
+      <p class="lead">A hook tells Tess the moment a task is done. Or she tests after every commit, or when you press Test. No test scripts to write.</p>
+      <figure class="frame"><img src="/shots/start.webp" width="2200" height="1440" alt="Tess picking up a Passalong commit: 8 checks planned from the change, the first one running." loading="lazy"></figure>
+    </section>
+
+    <section class="step">
+      <p class="step-n">Step 2</p>
+      <h2>Tess uses your app <span class="orb orb-h" aria-hidden="true"></span></h2>
+      <p class="lead">She reads the change, plans what could break, and clicks through it in a real Chrome while you watch. She can look, but she can’t edit your code.</p>
+      <figure class="frame"><img src="/shots/live.webp" width="2200" height="1440" alt="Tess mid-test on the Passalong hub, 5 of 8 checks done." loading="lazy"></figure>
+    </section>
+
+    <section id="proof" class="step">
+      <p class="step-n">Step 3</p>
+      <h2>You get one answer <span class="orb orb-h" aria-hidden="true"></span></h2>
+      <p class="lead">Each check passed, broke, or couldn’t run, with a screenshot and what she saw. She never calls a change safe with a gap.</p>
+      <figure class="frame"><img src="/shots/done.webp" width="2200" height="1440" alt="The finished Passalong test: 8 checks passed, with the evidence for each." loading="lazy"></figure>
+    </section>
+
+    <section class="step">
+      <p class="step-n">Step 4</p>
+      <h2>It goes back to Claude Code <span class="orb orb-h" aria-hidden="true"></span></h2>
+      <p class="lead">When something breaks, this is what Claude Code receives: Tess’s steps, what she expected and what she saw. It fixes the change and she tests again, up to three times.</p>
+      <figure class="frame frame-text">
+        <pre class="report">Ultimate Tester: FAIL — The change escapes note titles and lists the newest first. Titles are escaped twice: "Tom &amp; Jerry" shows as "Tom &amp;amp; Jerry" …
+
+- [fail] Title with &amp; and quotes shows exactly as typed
+    steps: Open the app → Type: Tom &amp; Jerry "quoted" into the Title textbox and press Enter → Reload the page
+    expected: The list item reads: Tom &amp; Jerry "quoted"
+    actual: The list item reads: Tom &amp;amp; Jerry &amp;quot;quoted&amp;quot;. The raw HTML is &lt;li&gt;Tom &amp;amp;amp; Jerry …&lt;/li&gt;, because esc() runs both when the note is saved (notes.unshift(esc(title))) and when the page is drawn (esc(n)).
+    evidence: curl output: &lt;li&gt;Tom &amp;amp;amp; Jerry &amp;amp;quot;quoted&amp;amp;quot;&lt;/li&gt;
+    evidence: 02-ampersand-quotes.png</pre>
+        <figcaption>From the real report of a failing test on the sample notes app in the repo. Long lines and file paths shortened.</figcaption>
+      </figure>
+    </section>
+
+    <section id="download" class="final">
+      <span class="orb orb-final" aria-hidden="true"></span>
+      <h2>Push with proof.</h2>
+      <p class="lead">Let Tess look before you push.</p>
+      <a class="pill pill-lg" href="/download/UltimateTester.dmg" download>Download for Mac</a>
+      <p class="needs">Free, on your own Claude Code plan. Runs on your Mac; sign-ins stay there and Tess never sees a password.<br>Apple silicon · Node.js 22+ · Google Chrome · Claude Code signed in. First open: right-click the app and choose Open.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span class="brand"><span class="orb" aria-hidden="true"></span>Ultimate Tester</span>
+    <span>From the makers of <a href="https://passalong.kreativekorna.com">Passalong</a>. Not affiliated with Anthropic.</span>
+  </footer>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

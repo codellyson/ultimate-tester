@@ -1,47 +1,35 @@
 @import "tailwindcss";
 
-/* Satoshi (Fontshare, ITF Free Font License), self-hosted so the Mac app works offline. No 600: semibold falls to Bold. */
-@font-face { font-family: "Satoshi"; src: url("../fonts/Satoshi-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Satoshi"; src: url("../fonts/Satoshi-Medium.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
-@font-face { font-family: "Satoshi"; src: url("../fonts/Satoshi-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-@font-face { font-family: "Satoshi"; src: url("../fonts/Satoshi-Italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
-@theme { --font-sans: "Satoshi", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+/* Passalong's fonts and tokens, shared with Passalong itself (regenerate with scripts/sync-passalong-styles.mjs). */
+@import "../../../styles/passalong.css";
+/* DESIGN.md: Geist for everything, Newsreader for titles, no monospace. */
+@font-face { font-family: "Geist"; src: url("/fonts/geist-var.woff2") format("woff2-variations"); font-weight: 100 900; font-display: swap; }
+@theme { --font-sans: "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; --font-mono: "Geist", -apple-system, system-ui, sans-serif; }
 
-/* Ink: neutral greys, black for actions; colour only for results, Tess's orb and the evidence. */
-:root {
-  --page: #f7f7f7; --sand: #ededed; --line: #dedede; --ink: #1c1c1e; --muted: #5f5f63;
-  --accent: #1c1c1e; --accent-soft: #ececec; --on-accent: #fff;
-  --bubble: #1c1c1e; --bubble-fg: #f2f2f2; --bubble-muted: #a1a1a6;
-  --ok: #2b7a46; --warn: #8a6100; --bad: #c22d37; --bad-soft: #fbecec;
-  --sidebar: #f0f0f0; --select: #e0e0e0;
-  --surface: #fff; --surface-hover: #fff; --canvas: #fff; --hover: rgb(0 0 0 / 0.05); --press: rgb(0 0 0 / 0.08);
-  --accent-hover: #3a3a3c; --accent-press: #000;
+/* DESIGN.md colour: black on white, greys for everything else. Status colour lives only in status icons.
+   One light palette for now; a dark one comes later, so the root ignores the appearance setting. */
+:root, :root[data-theme] {
   color-scheme: light;
-  --log: #1c1c1e; --log-fg: #e5e5e7; --log-say: #ffffff;
-  --orb1: #e4f0d8; --orb2: #7fa785; --orb3: #3f6b4b;
-}
-/* Dark: the same Ink rules inverted; follows the Mac's appearance setting. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page: #1e1e20; --sand: #29292b; --line: #3a3a3d; --ink: #ececee; --muted: #a1a1a6;
-    --accent: #f2f2f2; --accent-soft: #2f2f32; --on-accent: #111113;
-    --bubble: #34343a; --bubble-fg: #f2f2f2; --bubble-muted: #a1a1a6;
-    --ok: #4cc272; --warn: #e6b450; --bad: #ff6b6b; --bad-soft: #3b2325;
-    --log: #141415; --log-fg: #e5e5e7; --log-say: #ffffff;
-    --sidebar: #242426; --select: #3a3a3d;
-    --surface: #2a2a2c; --surface-hover: #323235; --canvas: #fff; --hover: rgb(255 255 255 / 0.06); --press: rgb(255 255 255 / 0.1);
-    --accent-hover: #ffffff; --accent-press: #d8d8d8;
-    color-scheme: dark;
-  }
-  :root .surface { box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 1px 2px rgb(0 0 0 / 0.3); }
-  :root .surface-float { box-shadow: 0 0 0 1px rgb(255 255 255 / 0.1), 0 8px 24px rgb(0 0 0 / 0.45); }
+  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "Geist", -apple-system, system-ui, sans-serif;
+  --bg: #fff; --fg: #000; --ink: #000; --muted: #666; --faint: #999;
+  --line: #eeeeee; --line-strong: #d6d6d6; --edge-ring: #eeeeee; --code: #f3f3f3; --field: #fff;
+  --page: #fff; --sand: #f4f4f4; --surface: #fff; --surface-raised: #fff; --surface-hover: #f4f4f4;
+  --sidebar: #fff; --select: #f4f4f4; --canvas: #fff; --row-hover: #fafafa;
+  --accent: #000; --on-accent: #fff; --accent-soft: #f3f3f3; --accent-hover: #2a2a2a; --accent-press: #000;
+  --ok: #1f8a4c; --ok-soft: #f4f4f4; --bad: #d1342f; --bad-soft: #f4f4f4; --warn: #999999; --warn-soft: #f4f4f4;
+  --danger: #d1342f; --danger-soft: #f4f4f4;
+  --bubble: #fff; --bubble-fg: #000; --bubble-muted: #666;
+  --hover: #fafafa; --press: #f0f0f0;
+  --log: #fafafa; --log-fg: #333; --log-say: #000;
+  --lift: 0 0 0 1px rgb(0 0 0 / .06), 0 12px 32px rgb(0 0 0 / .10);
+  --lift-sheet: 0 0 0 1px rgb(0 0 0 / .05), 0 16px 40px rgb(0 0 0 / .14);
 }
 /* Increase Contrast: real borders instead of faint shadows, stronger secondary text. */
 @media (prefers-contrast: more) {
-  :root { --line: #8e8e93; --muted: #3a3a3c; }
+  :root { --line: light-dark(#8e8a84, #8e8a84); --muted: light-dark(#3d3b38, #d6d1ca); }
   :root .surface, :root .surface-float { box-shadow: 0 0 0 1px var(--ink); }
 }
-@media (prefers-contrast: more) and (prefers-color-scheme: dark) { :root { --line: #8e8e93; --muted: #d1d1d6; } }
 
 html, body, #__nuxt { height: 100%; }
 /* The window never scrolls or bounces as a whole, as in a Mac app; only the panes inside it scroll. */
@@ -50,23 +38,33 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased; background: var(--page); color: var(--ink); font-size: 13px;
 }
-/* Large text (verdicts, Tess speaking): Satoshi pulled in slightly, as display sizes need. */
+/* Large text (verdicts, Tess speaking): pulled in slightly, as display sizes need. */
 .display { letter-spacing: -0.012em; }
+/* The italic turn in a headline, and Tess quoting herself, use Newsreader's real italic, as Passalong does. */
+.display .italic, .display.italic { font-family: var(--font-serif); font-weight: 400; letter-spacing: 0; }
 /* Placeholders are hints people must be able to read (WebKit's default grey is 3.3:1 on white). */
 ::placeholder { color: var(--muted); opacity: 1; }
 /* No single word left alone on a paragraph's last line. */
 p, li { text-wrap: pretty; }
-.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-.tess { background: radial-gradient(circle at 35% 30%, var(--orb1), var(--orb2) 55%, var(--orb3)); }
-@keyframes breathe { 50% { transform: scale(1.06); } }
-.breathe { animation: breathe 2.6s ease-in-out infinite; }
+.mono { font-family: var(--font-mono); }
+/* Tess's orb: the only colour in the app besides status icons. */
+.tess { position: relative; background: radial-gradient(circle at 35% 30%, #effbf2, #8fe0ad 35%, #2e7a50 72%, #0b2416); }
+/* Tess testing: the orb breathes and sends out a mint ring; it stops the moment she finishes. */
+@keyframes breathe { 50% { transform: scale(1.08); } }
+@keyframes ring { 0% { transform: scale(.8); opacity: .9 } 100% { transform: scale(1.5); opacity: 0 } }
+.breathe { animation: breathe 2.2s cubic-bezier(.4,0,.2,1) infinite; }
+.breathe::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid #8fe0ad; animation: ring 2.2s cubic-bezier(.2,0,0,1) infinite; }
 @keyframes pulse-dot { 50% { opacity: .35 } }
 .pulse { animation: pulse-dot 1.2s ease-in-out infinite; }
-@keyframes rise { from { opacity: .4; transform: translateY(6px) } }
-.rise { animation: rise .3s ease-out both; }
-@media (prefers-reduced-motion: reduce) { .breathe, .pulse, .rise { animation: none; } }
+@keyframes rise { from { opacity: 0; transform: translateY(6px) } }
+.rise { animation: rise 350ms cubic-bezier(0.2, 0, 0, 1) both; }
+@media (prefers-reduced-motion: reduce) { .breathe, .breathe::after, .pulse, .rise { animation: none; } }
 /* One visible focus ring everywhere, drawn above element outlines. */
 :focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 2px; }
+/* Fields draw their own focus ring (black ring plus halo), so the global outline would double it. */
+.field:focus-visible { outline: none !important; }
+/* A field with several lines keeps soft 12px corners; a full pill only suits one line. */
+textarea.field { border-radius: 12px; }
 /* A lone search field shows focus with its caret, like Spotlight; no ring around it. */
 .no-ring:focus-visible { outline: none !important; }
 
@@ -75,26 +73,26 @@ p, li { text-wrap: pretty; }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 /* Shown while scrolling (the .scrolling class, set for a moment by useTester) or when the pointer is on the bar, as macOS does. */
 ::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
-.scrolling::-webkit-scrollbar-thumb { background-color: rgb(0 0 0 / 0.22); }
-::-webkit-scrollbar-thumb:hover { background-color: rgb(0 0 0 / 0.38); }
-@media (prefers-color-scheme: dark) {
-  .scrolling::-webkit-scrollbar-thumb { background-color: rgb(255 255 255 / 0.22); }
-  ::-webkit-scrollbar-thumb:hover { background-color: rgb(255 255 255 / 0.38); }
-}
+.scrolling::-webkit-scrollbar-thumb { background-color: light-dark(rgb(0 0 0 / 0.22), rgb(255 255 255 / 0.22)); }
+::-webkit-scrollbar-thumb:hover { background-color: light-dark(rgb(0 0 0 / 0.38), rgb(255 255 255 / 0.38)); }
 
-/* Raised surfaces get depth from layered shadow, not a tinted border. */
-.surface { box-shadow: 0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 12px rgb(0 0 0 / 0.04); }
-.surface-float { box-shadow: 0 0 0 1px rgb(0 0 0 / 0.06), 0 4px 8px rgb(0 0 0 / 0.06), 0 16px 32px rgb(0 0 0 / 0.08); }
+/* In-flow cards get a hairline; only things above the page (screenshots, sheets, menus) cast a shadow. */
+.surface { box-shadow: inset 0 0 0 1px var(--line); }
+.surface-float { box-shadow: var(--lift); }
+.lifted { box-shadow: var(--lift); }
 
 @layer components {
-  .btn { @apply inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] ring-1 ring-[var(--line)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] active:bg-[var(--sand)] transition-[background-color] duration-150 disabled:opacity-40 disabled:pointer-events-none; }
-  .btn-blue { @apply inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] font-medium bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[var(--accent-hover)] shadow-sm active:bg-[var(--accent-press)] transition-[background-color] duration-150 disabled:opacity-40 disabled:pointer-events-none; }
+  /* Buttons are 32px pills. One black (.btn-blue, the primary) per view; the rest outline. */
+  .btn { @apply inline-flex items-center justify-center gap-1.5 h-8 rounded-full ps-3 pe-3.5 text-[13px] font-medium whitespace-nowrap ring-1 ring-inset ring-[var(--line-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-hover)] active:scale-[.96] disabled:opacity-40 disabled:pointer-events-none; }
+  .btn-blue { @apply inline-flex items-center justify-center gap-1.5 h-8 rounded-full ps-3 pe-3.5 text-[13px] font-medium whitespace-nowrap bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[var(--accent-hover)] active:scale-[.96] disabled:opacity-40 disabled:pointer-events-none; }
+  .btn-plain { @apply inline-flex items-center gap-1.5 h-8 rounded-full px-2.5 text-[13px] font-medium text-[var(--ink)] hover:bg-[var(--surface-hover)] active:scale-[.96]; }
+  .pill { @apply inline-flex items-center gap-1.5 h-[22px] rounded-full px-2.5 text-[12px] font-semibold whitespace-nowrap; }
   /* Quiet row actions (Edit, Add): muted until hovered, so a card of them reads as one list. */
   .link-quiet { @apply text-[var(--muted)] hover:text-[var(--ink)] hover:underline underline-offset-2; }
   .link { @apply text-[var(--ink)] underline decoration-[var(--line)] underline-offset-2 hover:decoration-current; }
-  .field { @apply w-full rounded-lg bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--line)] focus:ring-2 focus:ring-[var(--accent)] outline-none px-2.5 py-1.5 text-[13px]; }
+  .field { @apply w-full rounded-[18px] bg-[var(--surface)] text-[var(--ink)] ring-1 ring-inset ring-[var(--line-strong)] focus:ring-[1.5px] focus:ring-[var(--ink)] focus:shadow-[0_0_0_4px_rgb(0_0_0/.06)] outline-none px-3.5 py-2 text-[13px]; }
   .crumb { @apply h-7 flex items-center gap-1.5 rounded-md px-1.5 hover:bg-[var(--hover)] aria-expanded:bg-[var(--hover)]; }
-  .menu-item { @apply w-full text-start rounded-md px-3 py-2 hover:bg-[var(--sand)] flex items-center gap-2; }
+  .menu-item { @apply w-full text-start rounded-lg px-2.5 py-[7px] hover:bg-[var(--sand)] flex items-center gap-2.5 text-[13px]; }
 }
 
 /* Motion: one curve; feedback in 150ms, view changes in 200ms; exits softer than enters. */
@@ -106,7 +104,7 @@ p, li { text-wrap: pretty; }
     transition-timing-function: var(--ease);
   }
 }
-/* Like a Mac app: pressed controls darken (never shrink), and window chrome cannot be selected.
+/* Pressed plain controls darken; .btn and .btn-blue shrink to 0.96. Window chrome cannot be selected.
    Content people read and copy (notes, logs, Tess's words, profile values, code) stays selectable. */
 button:not(.btn):not(.btn-blue):active:not(:disabled) { background-color: var(--press); }
 body { -webkit-user-select: none; user-select: none; cursor: default; }

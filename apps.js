@@ -33,3 +33,26 @@ export function addApp(path) {
 }
 
 export const findApp = (id) => listApps().find((a) => a.id === id) ?? null;
+
+// Takes an app off the list. Its repo, test plan and saved tests are left where they are.
+export function removeApp(id) {
+  const apps = listApps();
+  if (!apps.some((a) => a.id === id)) throw new Error('No such app');
+  writeFileSync(FILE, JSON.stringify(apps.filter((a) => a.id !== id), null, 2));
+}
+
+// App-wide settings, for every repo on this Mac: ~/.ultimate-tester/settings.json. Environment variables still win.
+const SETTINGS = join(DIR, 'settings.json');
+export const DEFAULT_SETTINGS = { model: 'opus', timeoutMin: 12, notifications: true };
+export function readSettings() {
+  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { return { ...DEFAULT_SETTINGS }; }
+}
+export function writeSettings(patch) {
+  const next = { ...readSettings() };
+  if ('model' in patch) { if (!['opus', 'sonnet'].includes(patch.model)) throw new Error('Choose Opus or Sonnet'); next.model = patch.model; }
+  if ('timeoutMin' in patch) { const m = Number(patch.timeoutMin); if (!Number.isInteger(m) || m < 5 || m > 60) throw new Error('Time limit is 5 to 60 minutes'); next.timeoutMin = m; }
+  if ('notifications' in patch) next.notifications = !!patch.notifications;
+  mkdirSync(DIR, { recursive: true });
+  writeFileSync(SETTINGS, JSON.stringify(next, null, 2));
+  return next;
+}

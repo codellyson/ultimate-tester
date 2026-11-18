@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckIcon } from '@heroicons/vue/16/solid'
+import { PhCheck as CheckIcon } from '@phosphor-icons/vue'
 // Who Tess tests as, with one sign-in button per person who needs it.
 const { state, setupAction, loadApps } = useTester()
 const s = computed(() => state.setup!)
@@ -21,7 +21,7 @@ async function finish() { if (await setupAction('signin/finish')) loadApps() }
             <button class="btn-blue" @click="finish">I'm signed in</button>
           </template>
           <template v-else>
-            <span v-if="p.savedAt" class="text-[var(--ok)] flex items-center gap-1"><CheckIcon class="size-4" aria-hidden="true" />Signed in · {{ date(p.savedAt) }}</span>
+            <span v-if="p.savedAt" class="text-[var(--muted)] flex items-center gap-1"><CheckIcon class="size-4" aria-hidden="true" />Signed in · {{ date(p.savedAt) }}</span>
             <button
               :class="p.savedAt ? 'link text-[12px]' : 'btn'" :disabled="busy"
               :aria-label="`${p.savedAt ? 'Sign in again' : 'Sign in'} as ${p.label}`"

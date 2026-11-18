@@ -1,17 +1,20 @@
-import { markRaw, type Component } from 'vue'
-import { ArrowPathIcon, CheckCircleIcon, ClockIcon, MinusCircleIcon, QuestionMarkCircleIcon, StopCircleIcon, XCircleIcon } from '@heroicons/vue/20/solid'
+import { markRaw, h, type Component } from 'vue'
+import { PhCheckCircle, PhXCircle, PhCircleDashed, PhArrowClockwise, PhCircle, PhStopCircle, PhMinusCircle } from '@phosphor-icons/vue'
+
+// A Phosphor icon at a fixed weight, used like any icon component.
+const ph = (c: Component, weight: 'regular' | 'fill' | 'bold' = 'regular') => markRaw({ inheritAttrs: true, render() { return h(c as any, { weight }) } }) as Component
 
 export type Status = 'pass' | 'fail' | 'unverified' | 'running' | 'pending' | 'stopped' | 'notrun'
 
-// One Heroicon per result; render with <component :is="statusOf(s).icon" class="size-4" />.
+// One Phosphor icon per result (DESIGN.md: the only coloured icons); render with <component :is="statusOf(s).icon" class="size-4" />.
 export const STATUS: Record<string, { icon: Component, cls: string, word: string }> = {
-  pass: { icon: markRaw(CheckCircleIcon), cls: 'text-[var(--ok)]', word: 'passed' },
-  fail: { icon: markRaw(XCircleIcon), cls: 'text-[var(--bad)]', word: 'broke' },
-  unverified: { icon: markRaw(QuestionMarkCircleIcon), cls: 'text-[var(--warn)]', word: "can't check" },
-  running: { icon: markRaw(ArrowPathIcon), cls: 'text-[var(--ink)] spin-slow', word: 'testing now' },
-  pending: { icon: markRaw(ClockIcon), cls: 'text-[var(--muted)]', word: 'to go' },
-  stopped: { icon: markRaw(StopCircleIcon), cls: 'text-[var(--muted)]', word: 'stopped' },
-  notrun: { icon: markRaw(MinusCircleIcon), cls: 'text-[var(--muted)]', word: 'not checked' },
+  pass: { icon: ph(PhCheckCircle), cls: 'text-[var(--ok)]', word: 'passed' },
+  fail: { icon: ph(PhXCircle, 'fill'), cls: 'text-[var(--bad)]', word: 'broke' },
+  unverified: { icon: ph(PhCircleDashed), cls: 'text-[var(--faint)]', word: "couldn't run" },
+  running: { icon: ph(PhArrowClockwise), cls: 'text-[var(--ink)] spin-slow', word: 'testing now' },
+  pending: { icon: ph(PhCircle), cls: 'text-[var(--line-strong)]', word: 'to go' },
+  stopped: { icon: ph(PhStopCircle), cls: 'text-[var(--muted)]', word: 'stopped' },
+  notrun: { icon: ph(PhMinusCircle), cls: 'text-[var(--faint)]', word: 'not checked' },
 }
 export const statusOf = (s?: string) => STATUS[s ?? ''] ?? STATUS.pending!
 
@@ -30,7 +33,7 @@ export const short = (t?: string) => (t || 'Test')
 
 export const TARGETS = [
   { kind: 'changes', label: 'My changes', hint: 'everything not committed' },
-  { kind: 'commit', label: 'Last commit', hint: 'HEAD' },
+  { kind: 'commit', label: 'Last commit', hint: 'your latest commit' },
   { kind: 'range', target: 'origin/prd..HEAD', label: 'Release to prd', hint: 'everything going to prd' },
   { kind: 'range', target: 'origin/main..HEAD', label: 'Release to main', hint: 'everything going to main' },
 ] as const
@@ -55,3 +58,22 @@ export function chipText(step: string) {
 
 export const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, '')
 export const plural = (n: number) => (n === 1 ? '' : 's')
+
+// When Tess tests: what each choice does and what it changes, only on this Mac. Used by onboarding and Settings.
+export const TRIGGERS = [
+  { mode: 'stop', title: 'When Claude Code finishes a task', hint: "If something broke, Tess tells Claude Code what she saw and it fixes it. Claude Code waits for her each time, usually 3 to 10 minutes, and she'll send it back at most 3 times.", file: "Adds a setting to this project on your Mac only. Nothing gets shared or committed." },
+  { mode: 'commit', title: 'After every commit', hint: "Tess tests in the background and the result shows up here. You don't have to wait for it.", file: "Adds a setting to this project on your Mac only. Nothing gets shared or committed." },
+  { mode: 'manual', title: 'Only when I ask', hint: 'Press New test, ⌘N or ⌘K whenever you want one.', file: 'Turns off any automatic testing Ultimate Tester set up.' },
+] as const
+
+// A finished test in a few words, from its counts: "1 of 3 broke", "4 of 5 passed, 1 couldn't run", "3 passed".
+export function outcome(r: { status: string, counts?: { pass: number, fail: number, unk: number } }) {
+  if (r.status === 'running') return 'Testing now'
+  if (r.status === 'stopped') return 'Stopped'
+  const c = r.counts
+  const total = c ? c.pass + c.fail + c.unk : 0
+  if (!c || !total) return statusOf(r.status).word.replace(/^./, (x) => x.toUpperCase())
+  if (c.fail) return `${c.fail} of ${total} broke`
+  if (c.unk) return `${c.pass} of ${total} passed, ${c.unk} couldn't run`
+  return `${c.pass} passed`
+}

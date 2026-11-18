@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.kreativekorna.ultimate-tester",
   "build": {
-    "frontendDist": "loading"
+    "frontendDist": "loading",
+    "beforeBuildCommand": "sh -c 'cd \"$(git rev-parse --show-toplevel)\" && sh desktop/stage-engine.sh'"
   },
   "app": {
     "withGlobalTauri": true,
@@ -19,14 +20,28 @@
         "minHeight": 560,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "trafficLightPosition": { "x": 16, "y": 24 }
+        "trafficLightPosition": {
+          "x": 16,
+          "y": 24
+        },
+        "theme": "Light"
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
-    "icon": ["icons/icon.png", "icons/icon.icns"]
+    "targets": [
+      "app"
+    ],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns"
+    ],
+    "resources": {
+      "engine/": "engine/"
+    }
   }
 }

@@ -1,76 +1,88 @@
 <script setup lang="ts">
-// Getting ready: Tess asks one thing at a time.
+import { PhCheckCircle, PhCircle } from '@phosphor-icons/vue'
+// Getting ready, as a short checklist: one line per step, the details only when you open a step.
 const { state, setupAction, startTest } = useTester()
 const s = computed(() => state.setup!)
 const app = computed(() => state.apps.find((a) => a.id === state.appId)!)
 const drafting = computed(() => s.value.job.kind === 'draft' && s.value.job.status === 'working')
 const needs = computed(() => s.value.personas.filter((p) => p.signIn && !p.savedAt))
+const signIns = computed(() => s.value.personas.filter((p) => p.signIn))
 
-// The installed trigger, changed in place: picking one installs it and removes the other.
-const savingTrigger = ref(false)
-const installed = () => (s.value.triggers.stop ? 'stop' : s.value.triggers.commit ? 'commit' : 'manual')
-// What the radios show: the choice while it installs, then whatever is really installed (also after a failure).
-const pick = ref<'stop' | 'commit' | 'manual'>(installed())
-watch(() => s.value.triggers, () => { if (!savingTrigger.value) pick.value = installed() }, { deep: true })
-const trigger = computed<'stop' | 'commit' | 'manual'>({
-  get: () => pick.value,
-  set: async (mode) => {
-    pick.value = mode
-    savingTrigger.value = true
-    await setupAction('trigger', { mode })
-    savingTrigger.value = false
-    pick.value = installed()
-  },
-})
-async function draft() { if (await setupAction('draft')) state.confirmJustDrafted = true }
+// Each trigger on or off by itself, from what is really installed; the box shows the change while it installs.
+const saving = ref<'stop' | 'commit' | null>(null)
+const want = reactive({ stop: false, commit: false })
+watchEffect(() => { if (!saving.value) Object.assign(want, s.value.triggers) })
+async function toggle(which: 'stop' | 'commit', on: boolean) {
+  want[which] = on
+  saving.value = which
+  await setupAction('hook', { which, on })
+  saving.value = null
+}
+async function draft() { if (await setupAction('draft')) { state.confirmJustDrafted = true; open.value = 'plan' } }
+
+const mustCount = computed(() => (s.value.profile.split(/^## Must never break/m)[1]?.split(/^## /m)[0] ?? '').split('\n').filter((l) => /^\s*-\s+\S/.test(l)).length)
+const steps = computed(() => [
+  { key: 'plan', title: 'Test plan', done: s.value.profileReady && !state.confirmJustDrafted,
+    line: state.confirmJustDrafted ? 'I drafted this from your repo. Check it before I test.' : [`${s.value.personas.length} ${s.value.personas.length === 1 ? 'person' : 'people'} to test as`, mustCount.value ? `${mustCount.value} things that must never break` : ''].filter(Boolean).join(' · '),
+    action: 'Review' },
+  { key: 'people', title: 'Sign in', done: !needs.value.length,
+    line: !signIns.value.length ? 'Nobody needs signing in.' : needs.value.length ? `Signed in as ${signIns.value.length - needs.value.length} of ${signIns.value.length}. Sign in once per person, with a test account.` : `Signed in as all ${signIns.value.length}.`,
+    action: needs.value.length ? 'Sign in' : 'View' },
+  { key: 'when', title: 'When to test', done: true,
+    line: [want.stop && 'When Claude Code finishes a task', want.commit && 'After every commit'].filter(Boolean).join(' and ') || 'Only when you ask',
+    action: 'Change' },
+])
+// The first unfinished step starts open; everything else stays one line.
+const open = ref<string | null>(null)
+watchEffect(() => { if (open.value === null) open.value = steps.value.find((x) => !x.done)?.key ?? '' })
+const left = computed(() => steps.value.filter((x) => !x.done).length)
 </script>
 
 <template>
   <section class="flex-1 min-w-0 min-h-0 overflow-y-auto">
-    <div class="max-w-3xl mx-auto px-10 py-10 flex flex-col gap-6">
-      <h1 v-if="!state.inSettings" class="display text-[26px] leading-tight font-medium text-balance">{{ s.profileReady && s.allSignedIn ? `How Tess tests ${app.name}` : `Setting up ${app.name}` }}</h1>
+    <div class="max-w-2xl mx-auto px-10 py-10 flex flex-col gap-6">
+      <div v-if="!state.inSettings">
+        <h1 class="font-[family-name:var(--font-serif)] text-[34px] leading-[1.12] font-semibold tracking-[-0.015em] text-balance">{{ s.profileReady && !left ? `How I test ${app.name}` : `Setting up ${app.name}` }}</h1>
+        <p v-if="s.profileReady" class="mt-1 text-[12.5px] text-[var(--muted)]">{{ left ? `${left} ${left === 1 ? 'thing' : 'things'} left before I can test everything` : 'Ready to test' }}</p>
+      </div>
 
       <template v-if="!s.profileReady || drafting">
-        <TessSays v-if="drafting">Reading {{ app.name }}… I'm looking at how it starts, what it talks to, who uses it and what they do most.</TessSays>
-        <TessSays v-else>
-          I haven't met {{ app.name }} yet. Let me read the repo and work out how to test it. You'll get to check everything before I touch anything.
-          <template #actions>
-            <button class="btn-blue self-start" @click="draft">Read my repo</button>
-            <p v-if="s.job.kind === 'draft' && s.job.status === 'error'" class="text-[var(--bad)]">{{ s.job.message }}</p>
-          </template>
-        </TessSays>
-      </template>
-
-      <template v-else>
-        <TessSays>{{ state.confirmJustDrafted ? `I read ${app.name}. Here's how I'll test it. Fix anything that's wrong; I'll follow this exactly.` : `Here's how I test ${app.name}. Change anything, any time.` }}</TessSays>
-        <div class="ms-12 flex flex-col gap-3">
-          <h2 class="text-[13px] font-medium text-[var(--muted)]">How I test this app</h2>
-          <ProfileCard :profile="s.profile" />
-          <button v-if="state.confirmJustDrafted" class="btn-blue self-start" @click="state.confirmJustDrafted = false">Looks right</button>
+        <TessSays v-if="drafting">I'm reading {{ app.name }}: how it starts, what it talks to, who uses it and what they do most.</TessSays>
+        <div v-else class="rounded-2xl surface px-6 py-6 flex flex-col items-start gap-3">
+          <p class="text-[15px] leading-relaxed text-[#333] max-w-xl">I don't have a test plan for {{ app.name }} yet. I'll read your repo and draft one: how to start the app, who uses it, and what must never break. You check it before I run anything.</p>
+          <button class="btn-blue" @click="draft">Read my repo</button>
+          <p v-if="s.job.kind === 'draft' && s.job.status === 'error'" class="text-[13px] text-[var(--muted)]">{{ s.job.message }}</p>
         </div>
-
-        <template v-if="!state.confirmJustDrafted">
-          <TessSays>{{ needs.length ? `Different people see different things in ${app.name}, so I test as each of these. Sign me in once as the ones that need it, with test accounts, your usual way. I keep each session on this Mac and never see a password.` : `These are the people I test as. Everyone's ready.` }}</TessSays>
-          <div class="ms-12 flex flex-col gap-3">
-            <h2 class="text-[13px] font-medium text-[var(--muted)]">Who I test as</h2>
-            <PersonaList />
-          </div>
-          <TessSays>When should I test {{ app.name }}?</TessSays>
-          <div class="ms-12 max-w-2xl flex flex-col gap-2">
-            <h2 class="text-[13px] font-medium text-[var(--muted)]">When I test</h2>
-            <TriggerPicker v-model="trigger" :disabled="savingTrigger" />
-          </div>
-          <!-- Settings only configures; tests start from the main window (⌘N), so this window never turns into a test. -->
-          <TessSays v-if="!needs.length && !state.inSettings">
-            All set. What should I test?
-            <template #actions>
-              <div class="flex flex-wrap gap-2">
-                <button v-for="t in targetsFor(s.remotes).slice(0, 3)" :key="t.label" class="btn" :disabled="s.running" @click="startTest(t)">{{ t.label }}</button>
-              </div>
-            </template>
-          </TessSays>
-        </template>
       </template>
+
+      <ul v-else class="flex flex-col gap-2">
+        <li v-for="st in steps" :key="st.key" :class="['rounded-[10px]', open === st.key ? 'bg-[var(--sand)]' : 'hover:bg-[var(--row-hover)]']">
+          <button class="w-full text-start flex items-center gap-2.5 p-3 rounded-[10px]" :aria-expanded="open === st.key" @click="open = open === st.key ? '' : st.key">
+            <component :is="st.done ? PhCheckCircle : PhCircle" :class="['size-[18px] shrink-0', st.done ? 'text-[var(--ok)]' : 'text-[var(--line-strong)]']" aria-hidden="true" />
+            <span class="sr-only">{{ st.done ? 'Done' : 'To do' }}: </span>
+            <span class="flex-1 min-w-0">
+              <span class="block text-[14px] font-medium">{{ st.title }}</span>
+              <span class="block text-[12.5px] text-[var(--muted)] text-pretty">{{ st.line }}</span>
+            </span>
+            <span class="text-[12.5px] font-medium text-[var(--muted)] shrink-0">{{ open === st.key ? 'Close' : st.action }}</span>
+          </button>
+          <Transition name="reveal">
+            <div v-if="open === st.key" class="px-3 pb-3 flex flex-col gap-3">
+              <template v-if="st.key === 'plan'">
+                <ProfileCard :profile="s.profile" />
+                <button v-if="state.confirmJustDrafted" class="btn-blue self-start" @click="state.confirmJustDrafted = false; open = steps.find((x) => !x.done)?.key ?? ''">Looks right</button>
+              </template>
+              <PersonaList v-else-if="st.key === 'people'" />
+              <TriggerToggles v-else :stop="want.stop" :commit="want.commit" :disabled="!!saving" @toggle="toggle" />
+            </div>
+          </Transition>
+        </li>
+      </ul>
+
+      <!-- Settings only configures; tests start from the main window (⌘N), so this window never turns into a test. -->
+      <div v-if="s.profileReady && !state.confirmJustDrafted && !needs.length && !state.inSettings" class="flex flex-wrap items-center gap-2">
+        <button v-for="(t, i) in targetsFor(s.remotes).slice(0, 3)" :key="t.label" :class="i === 0 ? 'btn-blue' : 'btn'" :disabled="s.running" @click="startTest(t)">Test {{ t.label.toLowerCase() }}</button>
+      </div>
     </div>
   </section>
 </template>

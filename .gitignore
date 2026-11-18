@@ -3,3 +3,9 @@ node_modules/
 .nuxt/
 .data/
 desktop/target/
+desktop/engine/
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/evidence/
+.impeccable/critique/
+site/public/download/*.dmg

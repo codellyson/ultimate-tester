@@ -86,14 +86,13 @@ export function createActions(root) {
         return { ...p, savedAt };
       });
       const profileReady = !!profile && profile !== TEMPLATE;
-      const hasRuns = existsSync(join(state, 'runs')) && readdirSync(join(state, 'runs')).length > 0;
       return {
         profile,
         profileReady,
         // Which version of the profile this page is showing; a save based on an older one is refused.
         profileHash: createHash('sha1').update(profile).digest('hex'),
-        // Apps set up before onboarding existed count as onboarded once they have a test.
-        onboarded: existsSync(join(state, 'onboarded')) || (profileReady && hasRuns),
+        // An app with a finished test plan is set up, whether or not it went through getting started or has tests.
+        onboarded: existsSync(join(state, 'onboarded')) || profileReady,
         triggers: triggers(),
         // Remote branches, so release choices only show for branches this repo has.
         remotes: remoteBranches(),
@@ -213,6 +212,12 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
       cli('install', mode);
     },
 
+    // Settings: one trigger on or off, leaving the other as it is.
+    setHook(which, on) {
+      if (!['stop', 'commit'].includes(which)) throw new Error('Choose a trigger');
+      execFileSync(process.execPath, [CLI, on ? 'install' : 'uninstall', which], { cwd: root, env: childEnv(), stdio: 'ignore' });
+    },
+
     finishOnboarding() {
       mkdirSync(state, { recursive: true });
       writeFileSync(join(state, 'onboarded'), new Date().toISOString());
@@ -240,7 +245,8 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
     startRun(kind, target, note) {
       if (typeof note === 'string' && note.length > 1000) throw new Error('Keep the note under 1000 characters');
       if (run || activeRun()) throw new Error('A test is already running');
-      const args = kind === 'commit' ? ['--commit', target || 'HEAD'] : kind === 'range' ? ['--range', target] : [];
+      if (kind === 'setup' && !/^[\w-]+$/.test(target ?? '')) throw new Error('Pick a finished test to set up for');
+      const args = kind === 'setup' ? ['--setup', target] : kind === 'commit' ? ['--commit', target || 'HEAD'] : kind === 'range' ? ['--range', target] : [];
       if (kind === 'range' && !/^[\w./-]+\.\.[\w./-]+$/.test(target ?? '')) throw new Error('A release is two refs, like origin/prd..HEAD');
       if (kind === 'commit' && target && !/^[\w./-]+$/.test(target)) throw new Error('That is not a commit or branch name');
       // Detached so a test keeps going if the app or engine restarts mid-run.

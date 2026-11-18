@@ -30,7 +30,7 @@ export function runInfo(root: string, id: string) {
   const flows: { status: string }[] = v?.flows ?? []
   const counts = { pass: flows.filter((f) => f.status === 'pass').length, fail: flows.filter((f) => f.status === 'fail').length, unk: flows.filter((f) => f.status === 'unverified').length }
   const shotCount = existsSync(dir) ? readdirSync(dir).filter((f: string) => f.endsWith('.png')).length : 0
-  return { id, status: stopped ? 'stopped' : v?.status ?? (quiet ? 'stopped' : 'running'), summary: v?.summary ?? '', title: runTitle(c), kind: c?.kind ?? null, target: c?.target ?? null, note: c?.note ?? '', counts, shotCount }
+  return { id, status: stopped ? 'stopped' : v?.status ?? (quiet ? 'stopped' : 'running'), summary: v?.summary ?? '', title: runTitle(c), kind: c?.kind ?? null, target: c?.target ?? null, note: c?.note ?? '', source: c?.source ?? null, counts, shotCount }
 }
 
 // A run is named by its commit message; uncommitted changes and message-less runs by what they touched.

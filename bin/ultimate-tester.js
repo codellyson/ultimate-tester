@@ -4,21 +4,22 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, appendFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shouldSkip, VERDICT_SCHEMA, enforceEvidence, renderReport, usageLabel, withPort, parsePersonas, recentRuns, withoutOurStopHook } from '../lib.js';
+import { shouldSkip, VERDICT_SCHEMA, enforceEvidence, renderReport, usageLabel, withPort, parsePersonas, recentRuns, withoutOurStopHook, addToSection, parseStart } from '../lib.js';
 const PORT = Number(process.env.ULTIMATE_TESTER_PORT ?? 4600);
 import { startBrowser, freePort, useSession } from '../live.js';
 import { sessionFile } from '../actions.js';
-import { addApp } from '../apps.js';
+import { addApp, readSettings } from '../apps.js';
 
 const HOME = dirname(dirname(fileURLToPath(import.meta.url)));
 const SELF = fileURLToPath(import.meta.url);
 const PROFILE = '.ultimate-tester.md';
 const STATE = '.ultimate-tester';
 const MAX_LOOPS = 3;
-// 12 minutes for a change or a commit (the window promises 3 to 10), 25 for a release (set in run()).
-let TIMEOUT_MS = Number(process.env.ULTIMATE_TESTER_TIMEOUT_MS ?? 12 * 60_000);
+// From General settings unless an environment variable says otherwise. A release gets 25 minutes (set in run()).
+const SETTINGS = readSettings();
+let TIMEOUT_MS = Number(process.env.ULTIMATE_TESTER_TIMEOUT_MS ?? SETTINGS.timeoutMin * 60_000);
 const PLAYWRIGHT_MCP = '@playwright/mcp@0.0.84';
-const MODEL = process.env.ULTIMATE_TESTER_MODEL ?? 'opus';
+const MODEL = process.env.ULTIMATE_TESTER_MODEL ?? SETTINGS.model;
 
 // Who pays: an API key is billed per run; a claude.ai login uses the person's plan limits.
 function billing() {
@@ -125,7 +126,7 @@ async function runTester(prompt, runDir) {
         const why = existsSync(join(runDir, 'stopped'))
           ? 'You stopped this test.'
           : code === null
-            ? `I ran out of time after ${Math.round(TIMEOUT_MS / 60_000)} minutes, so I couldn't finish. Try a smaller change, or give me longer with ULTIMATE_TESTER_TIMEOUT_MS.`
+            ? `I ran out of time after ${Math.round(TIMEOUT_MS / 60_000)} minutes, so I couldn't finish. Try a smaller change, or raise the time limit in Settings > General.`
             : `Something went wrong on my side before I could finish (${String(e.message || err).trim().slice(0, 200)}). Run the test again; if it keeps happening, check that Claude Code is signed in.`;
         resolve({ verdict: { status: 'unverified', summary: why, flows: [] }, costUsd: 0 });
       }
@@ -162,13 +163,64 @@ function personaLines() {
   }).join('\n');
 }
 
+// "Set this up": Tess creates, through the app's screens, what an earlier test's checks needed but didn't exist.
+// source: that test's run id. What she creates is saved to the profile's Environment section as steps to repeat.
+async function setupEnv(source) {
+  process.chdir(root());
+  if (!/^[\w-]+$/.test(source)) return { status: 'unverified', report: 'That is not a test id.' };
+  const runsRoot = join(process.cwd(), STATE, 'runs');
+  let from, fromChange = {};
+  try { from = JSON.parse(readFileSync(join(runsRoot, source, 'verdict.json'), 'utf8')); } catch { return { status: 'unverified', report: `No finished test ${source}.` }; }
+  try { fromChange = JSON.parse(readFileSync(join(runsRoot, source, 'change.json'), 'utf8')); } catch {}
+  const wanted = (from.flows ?? []).filter((f) => f.status === 'unverified' && f.needs && f.setupBy !== 'person');
+  if (!wanted.length) return { status: 'skip', report: 'Nothing in that test needs setting up.' };
+  // One item per distinct need, with the checks that wait on it.
+  const items = new Map();
+  for (const f of wanted) items.set(f.needs, [...(items.get(f.needs) ?? []), f.name]);
+
+  const runDir = join(runsRoot, new Date().toISOString().replace(/[:.]/g, '-'));
+  mkdirSync(runDir, { recursive: true });
+  writeFileSync(join(runDir, 'pid'), String(process.pid));
+  const title = fromChange.message && fromChange.message !== '(not committed yet)' ? fromChange.message.split('\n')[0] : fromChange.kind === 'changes' || !fromChange.kind ? 'uncommitted changes' : fromChange.mode ?? 'an earlier test';
+  writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: 'setup', message: `Set up for: ${title}`, files: [], note: '', kind: 'setup', target: source, source: { id: source, kind: fromChange.kind ?? 'changes', target: fromChange.target ?? null, note: fromChange.note ?? '', checks: wanted.map((f) => f.name) } }));
+  const port = await freePort();
+  const prompt = readFileSync(join(HOME, 'setup.md'), 'utf8')
+    .replace('{{PROFILE}}', () => withPort(readFileSync(PROFILE, 'utf8'), port))
+    .replace('{{PERSONAS}}', () => personaLines())
+    .replaceAll('{{AS}}', `node ${JSON.stringify(SELF)} as`)
+    .replaceAll('{{PORT}}', String(port))
+    .replaceAll('{{RUN_DIR}}', () => runDir)
+    .replace('{{NEEDS}}', () => [...items].map(([need, checks]) => `- ${need} (for: ${checks.join('; ')})`).join('\n'));
+
+  if (!HEADLESS) await openWindow();
+  const started = Date.now();
+  const { verdict: raw, costUsd } = await runTester(prompt, runDir);
+  let plan = [];
+  try { plan = JSON.parse(readFileSync(join(runDir, 'plan.json'), 'utf8')); } catch {}
+  const verdict = enforceEvidence(raw, plan);
+  // Keep the recipe: next time Tess (or a person) can recreate the same test data the same way.
+  let md = readFileSync(PROFILE, 'utf8');
+  // Steps are saved with the profile's usual port, not this run's one-off port.
+  const usual = parseStart(md).url?.match(/:(\d+)/)?.[1];
+  const fixPort = (t) => (usual ? t.replaceAll(String(port), usual) : t);
+  for (const f of verdict.flows ?? []) {
+    if (f.status === 'pass' && f.steps?.length) md = addToSection(md, 'Environment', fixPort(`${f.name}${f.persona && f.persona !== 'default' ? ` (as ${f.persona})` : ''}: ${f.steps.join('; ')}`));
+  }
+  writeFileSync(PROFILE, md);
+  const usage = usageLabel({ ...billing(), costUsd });
+  const report = renderReport(verdict, { runDir, durationS: Math.round((Date.now() - started) / 1000), usage });
+  writeFileSync(join(runDir, 'verdict.json'), JSON.stringify({ ...verdict, costUsd, usage, model: MODEL, durationMs: Date.now() - started }, null, 2));
+  writeFileSync(join(runDir, 'report.txt'), report);
+  return { status: verdict.status, report };
+}
+
 // Returns { status, report } — status is pass | fail | unverified | skip.
 async function run({ commit = null, range = null, dedupe = false, note = '' } = {}) {
   process.chdir(root());
   if (!existsSync(PROFILE)) return { status: 'skip', report: `No ${PROFILE}. Run: ultimate-tester init` };
   const change = collectChange(commit, range);
   // A release is many changes at once; give it room unless someone set a limit.
-  if (range && !process.env.ULTIMATE_TESTER_TIMEOUT_MS) TIMEOUT_MS = 25 * 60_000;
+  if (range && !process.env.ULTIMATE_TESTER_TIMEOUT_MS) TIMEOUT_MS = Math.max(25, SETTINGS.timeoutMin) * 60_000;
   const skip = shouldSkip(change.files);
   if (skip) return { status: 'skip', report: `Ultimate Tester skipped: ${skip}` };
 
@@ -272,7 +324,8 @@ function install(which) {
     writeFileSync(CLAUDE_FILES[0], JSON.stringify(settings, null, 2) + '\n');
     console.log(`Added Stop hook to ${CLAUDE_FILES[0]}`);
   }
-  if (which === 'stop') return;
+  // The commit hook only when asked for by name: plain `install` adds the Claude Code hook alone.
+  if (which !== 'commit') return;
   const hookFile = join(git('rev-parse', '--git-path', 'hooks'), 'post-commit');
   const line = `${cmd} run --commit > ${STATE}/last-commit.log 2>&1 & # ultimate-tester\n`;
   const existing = existsSync(hookFile) ? readFileSync(hookFile, 'utf8') : '#!/bin/sh\n';
@@ -310,7 +363,8 @@ switch (cmdName) {
     const commit = at < 0 ? null : rest[at + 1] && !rest[at + 1].startsWith('-') ? rest[at + 1] : 'HEAD';
     const r = rest.indexOf('--range');
     const n = rest.indexOf('--note');
-    const { status, report } = await run({ commit, range: r < 0 ? null : rest[r + 1], note: n < 0 ? '' : rest[n + 1] ?? '' });
+    const su = rest.indexOf('--setup');
+    const { status, report } = su >= 0 ? await setupEnv(rest[su + 1] ?? '') : await run({ commit, range: r < 0 ? null : rest[r + 1], note: n < 0 ? '' : rest[n + 1] ?? '' });
     console.log(report);
     process.exit(exitFor[status]);
   }
