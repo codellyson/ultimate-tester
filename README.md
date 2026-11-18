@@ -4,6 +4,8 @@ After every update, a fresh headless Claude Code session starts your app, drives
 
 Requires Node 20+, the `claude` CLI signed in, and `npx` (for the Playwright MCP).
 
+Website: https://ultimate-tester.kreativekorna.com · Mac app: [download the latest release](https://github.com/codellyson/ultimate-tester/releases/latest/download/UltimateTester.dmg) (Apple silicon).
+
 ## Desktop app and web version
 
 Ultimate Tester is one Nuxt app. Its Vue page (`app/`) is the window, and its Nitro server (`server/`) is the engine API; `bin/ultimate-tester.js serve` runs the built server on :4600 for every app you add. Build with `npm run build`; develop with `npm run dev` (port 4601).
