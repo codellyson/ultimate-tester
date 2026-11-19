@@ -238,6 +238,17 @@ async function addApp() {
   try { const a = await api<App>('/api/apps', { path }); await loadApps(); selectApp(a.id) } catch (e) { state.flash = (e as Error).message }
 }
 
+// Off the list only; the repo, its plan and its saved tests stay on disk.
+async function removeApp(id: string) {
+  const a = state.apps.find((x) => x.id === id)
+  if (!a || !(await askConfirm({ title: `Remove ${a.name} from Ultimate Tester?`, message: 'Its repo, test plan and saved tests stay where they are; you can add it again any time.', okLabel: 'Remove', danger: true }))) return
+  try {
+    await api(`/api/apps/${id}`, undefined, 'DELETE')
+    if (state.appId === id) { state.appId = null; state.home = true }
+    await loadApps()
+  } catch (e) { state.flash = (e as Error).message }
+}
+
 async function addSample() {
   state.flash = ''
   try { const a = await api<App>('/api/apps/sample', {}); await loadApps(); selectApp(a.id) } catch (e) { state.flash = (e as Error).message }
@@ -329,5 +340,5 @@ async function boot() {
 }
 
 export function useTester() {
-  return { state, tauri, saveGeneral, leaveDraft, api, refresh, loadApps, selectApp, show, openRun, startTest, rerun, stopTest, openSettings, addApp, addSample, setupAction, boot }
+  return { state, tauri, saveGeneral, leaveDraft, api, refresh, loadApps, selectApp, show, openRun, startTest, rerun, stopTest, openSettings, addApp, addSample, removeApp, setupAction, boot }
 }

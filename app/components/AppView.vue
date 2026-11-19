@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PhPlus, PhTrash, PhGearSix } from '@phosphor-icons/vue'
 // One app: where it stands, how to start a test, and every test so far. Settings live in the Settings window.
-const { state, startTest, openRun, show, openSettings, api, loadApps, refresh } = useTester()
+const { state, startTest, openRun, show, openSettings, api, refresh, removeApp } = useTester()
 const app = computed(() => state.apps.find((a) => a.id === state.appId)!)
 const s = computed(() => state.setup!)
 const running = computed(() => !!s.value.running)
@@ -22,10 +22,6 @@ const ask = (message: string, title: string, okLabel: string) => askConfirm({ ti
 async function remove(id: string, title: string) {
   if (!(await ask(`Its screenshots and report are deleted. This can't be undone.`, `Delete "${short(title)}"?`, 'Delete'))) return
   try { await api(`/api/apps/${state.appId}/runs/${id}`, undefined, 'DELETE'); refresh() } catch (e) { state.flash = (e as Error).message }
-}
-async function removeApp() {
-  if (!(await ask('Its repo, test plan and saved tests stay where they are; you can add it again any time.', `Remove ${app.value.name} from Ultimate Tester?`, 'Remove'))) return
-  try { await api(`/api/apps/${state.appId}`, undefined, 'DELETE'); state.appId = null; await loadApps(); state.home = true } catch (e) { state.flash = (e as Error).message }
 }
 </script>
 
@@ -77,7 +73,7 @@ async function removeApp() {
       </div>
 
       <div class="pt-2 border-t border-[var(--line)]">
-        <button class="link-quiet text-[12px]" :disabled="running" @click="removeApp">Remove {{ app.name }} from Ultimate Tester…</button>
+        <button class="link-quiet text-[12px]" :disabled="running" @click="removeApp(app.id)">Remove {{ app.name }} from Ultimate Tester…</button>
       </div>
     </div>
   </section>

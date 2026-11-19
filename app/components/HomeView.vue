@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { PhPlus } from '@phosphor-icons/vue'
+import { PhPlus, PhTrash } from '@phosphor-icons/vue'
 // Home: every app on this Mac, the ones that need you first. Click an app for its page, or test it in one click.
-const { state, selectApp, startTest, addApp, show, openSettings } = useTester()
+const { state, selectApp, startTest, addApp, removeApp, show, openSettings } = useTester()
 type A = (typeof state.apps)[number]
 const isRunning = (a: A) => a.running || a.last?.status === 'running'
 const needsSetup = (a: A) => !a.profileReady || !a.signedIn || (!a.onboarded && !a.last)
@@ -59,6 +59,7 @@ async function finish(a: A) {
             <button v-if="needsSetup(a)" class="btn-blue" @click="finish(a)">Finish setup</button>
             <button v-else class="btn" :disabled="isRunning(a)" title="Test your current changes in this app" @click="test(a)">Test</button>
           </span>
+          <button class="btn-plain me-1.5 size-8 justify-center text-[var(--muted)] hover:text-[var(--ink)]" :disabled="isRunning(a)" :aria-label="`Remove ${a.name}`" title="Remove from Ultimate Tester" @click="removeApp(a.id)"><PhTrash class="size-4" aria-hidden="true" /></button>
         </li>
       </ul>
     </div>

@@ -30,7 +30,7 @@ async function finish() { if (await setupAction('signin/finish')) loadApps() }
           </template>
         </div>
       </div>
-      <div class="px-5 py-3 text-[12px] text-[var(--muted)]">Add or rename people under Personas in the profile.</div>
+      <div class="px-5 py-3 text-[12px] text-[var(--muted)]">Add or rename people under "Who I test as" in the test plan.</div>
     </div>
     <p v-if="signinMsg" :class="signinMsg.status === 'error' ? 'text-[var(--bad)]' : 'text-[var(--muted)]'" role="status">{{ signinMsg.message }}</p>
   </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Grouped, with "Open" first: nothing that starts a run is ever the default.
-const { state, openRun, openSettings, startTest, rerun, stopTest, selectApp, addApp, show } = useTester()
+const { state, openRun, openSettings, startTest, rerun, stopTest, selectApp, addApp, removeApp, show } = useTester()
 const q = ref('')
 const sel = ref(-1)
 const input = ref<HTMLInputElement>()
@@ -21,6 +21,7 @@ const commands = computed<Cmd[]>(() => {
   for (const p of state.setup?.personas ?? []) if (p.signIn) list.push({ group: 'Sign in as', label: shortLabel(p.label), hint: p.savedAt ? 'signed in · opens Settings' : 'opens Settings', run: openSettings })
   for (const a of state.apps) if (a.id !== state.appId) list.push({ group: 'Apps', label: `Switch to ${a.name}`, run: () => selectApp(a.id) })
   list.push({ group: 'Apps', label: 'Add an app…', run: () => addApp() })
+  if (state.appId && !state.setup?.running) list.push({ group: 'Apps', label: `Remove ${state.apps.find((a) => a.id === state.appId)?.name ?? 'this app'}…`, run: () => removeApp(state.appId!) })
   return list
 })
 const shown = computed(() => commands.value.filter((c) => `${c.group} ${c.label}`.toLowerCase().includes(q.value.toLowerCase())))

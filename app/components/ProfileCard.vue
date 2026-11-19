@@ -2,10 +2,21 @@
 // The profile Markdown as a readable card: one row per section, each editable in place.
 const props = defineProps<{ profile: string, basic?: boolean }>()
 const { state, setupAction } = useTester()
-const LABELS: [string, string][] = [['Start', 'Start the app'], ['Allowed URLs', 'Allowed URLs'], ['Test accounts', 'Accounts'], ['Personas', 'Personas'], ['Must never break', 'Must never break'], ['Existing checks', 'Tests to run'], ['Notes for Tess', 'Notes for Tess'], ['Lessons', 'Corrections']]
+const LABELS: [string, string][] = [['Start', 'Starting your app'], ['Allowed URLs', 'Pages I may open'], ['Test accounts', 'Signing in'], ['Personas', 'Who I test as'], ['Must never break', 'Must always work'], ['Existing checks', 'Your own tests'], ['Notes for Tess', 'Notes for me'], ['Lessons', 'Corrections']]
+// The file stays in the terse form Tess reads; the card says the same thing in plain words.
+function plain(head: string, line: string) {
+  if (head === 'Start') return line
+    .replace(/^Command:\s*`?([^`]+?)`?\s*$/i, 'I start it with `$1`')
+    .replace(/^Ready when:\s*(\S+)\s+returns 200\b\.?/i, 'Then I wait until $1 loads')
+    .replace(/^Ready when:\s*/i, "It's ready when ")
+    .replace(/^Seed:\s*none\b\s*/i, 'No test data to set up ')
+    .replace(/^Seed:\s*/i, 'Test data: ')
+  if (head === 'Personas') return line.replace(/^[\w-]+:\s*/, '')
+  return line
+}
 // Shown even when missing, so there is always a place to tell Tess things.
 const ALWAYS = new Set(['Notes for Tess', 'Lessons'])
-const EMPTY: Record<string, string> = { 'Notes for Tess': 'None. Add what Tess should focus on, skip or watch for.', Lessons: 'None. When Tess gets a check wrong, correct her from the result and it is saved here.' }
+const EMPTY: Record<string, string> = { 'Notes for Tess': 'None. Tell me what to focus on, skip or watch for.', Lessons: 'None. When I get a check wrong, correct me from the result and I keep it here.' }
 
 const sections = computed(() => {
   const out: Record<string, string> = {}
@@ -13,7 +24,7 @@ const sections = computed(() => {
   return out
 })
 const rows = computed(() => LABELS.filter(([h]) => !(props.basic && ALWAYS.has(h)) && (h in sections.value || ALWAYS.has(h))).map(([head, label]) => ({
-  head, label, lines: (sections.value[head] ?? '').split('\n').filter((l) => l.trim()).map((l) => l.replace(/^\s*-\s*/, '').split(/(`[^`]+`)/)),
+  head, label, lines: (sections.value[head] ?? '').split('\n').filter((l) => l.trim()).map((l) => plain(head, l.replace(/^\s*-\s*/, '')).split(/(`[^`]+`)/)),
 })))
 function replaceSection(head: string, text: string) {
   if (!(head in sections.value)) return `${props.profile.trimEnd()}\n\n## ${head}\n${text.trim()}\n`
