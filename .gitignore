@@ -10,3 +10,4 @@ desktop/engine/
 .impeccable/critique/
 site/public/download/*.dmg
 site/dist/
+.ultimate-tester/

@@ -4,6 +4,7 @@
 - Command: npm run dev
 - Ready when: http://localhost:3000 returns 200
 - Seed: (command that resets test data, or "none")
+- Browser: needed ("not needed" when the app has no pages, only an API or backend)
 
 ## Allowed URLs
 - http://localhost:3000

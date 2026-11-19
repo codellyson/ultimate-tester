@@ -164,17 +164,30 @@ const selFlow = computed(() => flows.value.find((f) => f.name === state.sel.chec
 const selItem = computed(() => plan.value.find((p) => p.name === state.sel.check))
 // What Tess saw, in her words: her note on the check, else what she reported seeing.
 const saw = computed(() => selItem.value?.note || selFlow.value?.actual || '')
+// Evidence that isn't a screenshot: requests and what came back ("POST /notes {...} → 201 {...}"), or a log line.
+const pretty = (s: string) => { try { return JSON.stringify(JSON.parse(s), null, 2) } catch { return s } }
+const textEvidence = computed(() => (finished.value ? (selFlow.value?.evidence ?? []).filter((e) => !/\.(png|jpe?g|webp|gif)$/i.test(e.trim())).flatMap((e) => e.split(/;\s+(?=(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s)/)).map((e) => {
+  const [ask = '', ...rest] = e.split(' → ')
+  const got = rest.join(' → ')
+  const req = ask.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\S+)\s*(.*)$/i)
+  if (!req || !rest.length) return { raw: e }
+  const res = got.match(/^(\d{3})\b[;:]?\s*(.*)$/s)
+  return { method: req[1]!.toUpperCase(), path: req[2]!, sent: pretty(req[3]!.trim()), code: res?.[1] ?? '', body: pretty((res ? res[2]! : got).trim()) }
+}) : []))
+// The selected check's result in words, and for one that didn't run, who I'd need to sign in as.
+const selStatus = computed(() => (finished.value && selItem.value ? statusOf(selItem.value.status) : null))
+const selBlocker = computed(() => (selItem.value?.status === 'unverified' ? blockedBy(selItem.value) : null))
 const liveTick = ref(0)
 const screen = computed(() => {
   if (finished.value && r.value.shots.length) {
     const shot = mine.value[Math.min(state.sel.shot, mine.value.length - 1)]
     return shot
       ? { src: shotUrl(shot), file: shot, alt: `Evidence for: ${what.value}`, label: `Evidence · ${what.value}${mine.value.length > 1 ? ` · ${state.sel.shot + 1} of ${mine.value.length} (← →)` : ''}` }
-      : { src: null, empty: `I didn't take a screenshot for this one. My note is on the check.`, label: `Evidence · ${what.value}` }
+      : { src: null, empty: textEvidence.value.length ? '' : selItem.value?.status === 'unverified' ? "This check didn't run, so there's no screenshot." : "I didn't take a screenshot for this one.", label: `Evidence · ${what.value}` }
   }
   // A browser that never left about:blank is not evidence of anything.
   if (r.value.live && r.value.live.url !== 'about:blank') return { src: `/api/apps/${state.appId}/shots/${r.value.id}/live.jpg?t=${liveTick.value}`, alt: 'Your app, live, as I test it', label: `${live.value ? 'Live' : 'Last screen'} · ${r.value.live.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
-  return { src: null, empty: live.value ? (isSetup.value ? "I'm starting your app. You'll see it here once it's open." : "I'm reading what you changed. You'll see your app here once I open it.") : (r.value.status === 'stopped' ? 'The test stopped before I took a screenshot.' : r.value.live ? "I couldn't reach your app, so there's nothing to show. My note on the checks says why." : "There's no screenshot for this test."), label: live.value ? '' : 'No screen' }
+  return { src: null, empty: live.value ? (isSetup.value ? "I'm starting your app. You'll see it here once it's open." : /^- Browser:\s*not needed/im.test(state.setup?.profile ?? '') ? "I'm testing this one by sending it requests. What I send and get back shows on each check." : "I'm reading what you changed. You'll see your app here once I open it.") : (r.value.status === 'stopped' ? 'The test stopped before I took a screenshot.' : r.value.live ? "I couldn't reach your app, so there's nothing to show. My note on the checks says why." : textEvidence.value.length ? '' : "There's no screenshot for this test."), label: live.value ? '' : 'No screen' }
 })
 
 // Evidence up close: click or Space for full size; drag it out; right-click to copy or find the file.
@@ -249,6 +262,20 @@ const blockerNote = (g: { problems: PlanItem[] }) => {
   return p ? (p.note || flows.value.find((f) => f.name === p.name)?.actual || '') : ''
 }
 const pick = (name: string) => { state.sel = { id: r.value.id, check: name, shot: 0 } }
+// Nothing ran and the browser never reached the app: Tess couldn't start it. Say why and what to do, up front.
+const startFail = computed(() => {
+  const all = plan.value
+  if (!finished.value || r.value.status === 'stopped' || r.value.shots.length || !all.length || all.some((p) => p.status !== 'unverified')) return null
+  if (r.value.live && r.value.live.url !== 'about:blank') return null
+  const noteOf = (p: PlanItem) => p.note || flows.value.find((f) => f.name === p.name)?.actual || ''
+  const why = noteOf(all.find((p) => !blockedBy(p) && noteOf(p)) ?? all[0]!) || v.value?.summary || ''
+  const fix = /\block\b|already (running|in use)|EADDRINUSE|port \d* ?(is )?in use|PID \d+/i.test(why)
+    ? "Your own copy of the app is running from this folder, and I couldn't start mine beside it. Stop yours for a moment (or the terminal running it), then test again."
+    : /not found|ENOENT|command not found|missing|cannot find/i.test(why)
+      ? 'Something your app needs to start is missing. Check how I start it in Settings, then test again.'
+      : 'Start your app yourself once to see the error, or check how I start it in Settings, then test again.'
+  return { why, fix }
+})
 
 // ↑ ↓ move between checks and the screen follows; ← → step through a check's screenshots (in reading direction).
 const rail = ref<HTMLElement>()
@@ -343,7 +370,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
             <TransitionGroup name="list" tag="ul" class="flex flex-col gap-2"><CheckRow v-for="p in [...g.problems, ...g.passed]" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
             <template v-for="f in g.fixes" :key="f.who?.key ?? '-'">
               <!-- A missing sign-in is fixed in Settings. -->
-              <button v-if="f.who" class="mt-2 w-full flex items-center gap-2 text-start rounded-[10px] surface px-3 py-2.5 text-[13px] font-medium hover:bg-[var(--row-hover)]" @click="openSettings()">
+              <button v-if="f.who && !startFail" class="mt-2 w-full flex items-center gap-2 text-start rounded-[10px] surface px-3 py-2.5 text-[13px] font-medium hover:bg-[var(--row-hover)]" @click="openSettings()">
                 <span class="flex-1 text-pretty">Sign in as {{ shortLabel(f.who.label) }} so I can check {{ f.n === 1 ? 'this' : `these ${f.n}` }}</span>
                 <PhArrowRight class="size-4 shrink-0 rtl:-scale-x-100" aria-hidden="true" />
               </button>
@@ -362,24 +389,50 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
 
       <main id="evidence" class="flex-1 min-w-0 min-h-0 overflow-y-auto px-7 py-5 flex flex-col gap-3" aria-label="What Tess saw">
         <div class="flex items-baseline justify-between gap-4">
-          <h2 class="font-[family-name:var(--font-serif)] text-[20px] leading-tight font-semibold">{{ live ? 'Live' : (state.sel.check ? what : 'Evidence') }}</h2>
+          <h2 class="font-[family-name:var(--font-serif)] text-[20px] leading-tight font-semibold">{{ live ? 'Live' : startFail ? "I couldn't start your app" : (state.sel.check ? what : 'Evidence') }}</h2>
           <span v-if="live && r.live && r.live.url !== 'about:blank'" class="flex items-center gap-1.5 text-[12.5px] text-[var(--muted)] truncate"><PhGlobeSimple class="size-4 shrink-0" aria-hidden="true" />{{ r.live.url.replace(/^https?:\/\/[^/]+/, '') || '/' }}</span>
           <span v-else-if="!live && selFlow?.url && screen.src" class="flex items-center gap-1.5 text-[12.5px] text-[var(--muted)] truncate selectable"><PhGlobeSimple class="size-4 shrink-0" aria-hidden="true" />{{ selFlow.url }}</span>
         </div>
+        <p v-if="selStatus && !startFail" class="-mt-1 flex items-center gap-1.5 text-[12.5px] text-[var(--muted)]"><component :is="selStatus.icon" :class="['size-4', selStatus.cls]" aria-hidden="true" />{{ selStatus.word.charAt(0).toUpperCase() + selStatus.word.slice(1) }}</p>
         <p v-if="live && (chips.length || asWho)" class="flex flex-wrap gap-2 text-[12.5px] text-[var(--muted)]">
           <span v-if="chips.length" class="flex items-center gap-1.5"><PhArrowClockwise class="size-3.5 spin-slow" aria-hidden="true" />{{ chips.at(-1) }}</span>
           <span v-if="asWho">as {{ asWho }}</span>
           <span v-if="failing" class="flex items-center gap-1.5 text-[var(--ink)]"><PhXCircle weight="fill" class="size-3.5 text-[var(--bad)]" aria-hidden="true" />{{ failing.note || failing.name }}</span>
         </p>
+        <div v-if="startFail" class="rounded-2xl surface px-6 py-5 flex flex-col gap-3">
+          <p class="flex items-start gap-3 text-[15px] leading-[1.55]"><span class="tess size-[22px] rounded-full shrink-0 mt-0.5" aria-hidden="true" /><span><span class="block text-[12.5px] text-[var(--muted)]">What happened</span><span class="selectable">{{ startFail.why }}</span></span></p>
+          <p class="ms-[34px] text-[15px] leading-[1.55]"><span class="block text-[12.5px] text-[var(--muted)]">What to do</span>{{ startFail.fix }}</p>
+          <p class="ms-[34px] text-[12.5px] text-[var(--muted)]">None of the checks ran, so they say nothing about your change yet.</p>
+          <div class="ms-[34px] flex gap-2">
+            <button class="btn-blue" :disabled="!!state.setup?.running" @click="rerun()"><PhArrowClockwise class="size-4" aria-hidden="true" />Test again</button>
+            <button class="btn" @click="openSettings()">How I start it</button>
+          </div>
+        </div>
         <!-- The screenshot as a card: the whole page, lifted; crossfades between checks. -->
-        <Transition name="fade" mode="out-in">
+        <Transition v-else name="fade" mode="out-in">
           <figure v-if="screen.src" :key="live ? 'live' : screen.src" class="m-0 rounded-2xl overflow-hidden lifted bg-white shrink-0">
             <img :src="screen.src" :alt="screen.alt" draggable="true" class="block w-full h-auto cursor-zoom-in" title="Click or press Space to enlarge" @click="zoomed = true" @contextmenu="evidenceMenu">
           </figure>
-          <p v-else key="empty" class="rounded-2xl surface px-6 py-10 text-center text-[var(--muted)] text-pretty">{{ screen.empty }}</p>
+          <!-- No screenshot, but requests: they are the evidence, shown in the screenshot's place. -->
+          <div v-else-if="!live && textEvidence.length && !startFail" key="requests" class="rounded-2xl lifted bg-white overflow-hidden divide-y divide-[var(--line)] shrink-0 selectable">
+            <div v-for="(e, i) in textEvidence" :key="i" class="px-5 py-4 flex flex-col gap-2 text-[13px] leading-[1.55]">
+              <template v-if="'method' in e">
+                <p class="flex items-baseline gap-2 min-w-0"><span class="shrink-0 rounded-md bg-[#f3f3f3] px-1.5 py-0.5 text-[11.5px] font-semibold tracking-wide">{{ e.method }}</span><span class="font-medium break-all">{{ e.path }}</span></p>
+                <pre v-if="e.sent" class="m-0 font-[inherit] whitespace-pre-wrap break-words text-[#444]">{{ e.sent }}</pre>
+                <p class="flex items-baseline gap-2"><span v-if="e.code" class="shrink-0 rounded-full bg-black text-white px-2 py-0.5 text-[11.5px] font-semibold tabular-nums">{{ e.code }}</span><span v-else class="text-[var(--muted)]">→</span></p>
+                <pre v-if="e.body" class="m-0 font-[inherit] whitespace-pre-wrap break-words rounded-[10px] bg-[#fafafa] px-3 py-2 text-[#333] max-h-64 overflow-auto">{{ e.body }}</pre>
+              </template>
+              <pre v-else class="m-0 font-[inherit] whitespace-pre-wrap break-words text-[#333]">{{ e.raw }}</pre>
+            </div>
+          </div>
+          <p v-else-if="screen.empty" key="empty" class="rounded-2xl surface px-6 py-10 text-center text-[var(--muted)] text-pretty">{{ screen.empty }}</p>
         </Transition>
         <p v-if="!live && mine.length > 1" class="text-[12.5px] text-[var(--muted)] tabular-nums">Screenshot {{ state.sel.shot + 1 }} of {{ mine.length }} · ← →</p>
-        <p v-if="!live && saw" class="selectable text-[14px] leading-[1.55] text-[#333] text-pretty"><b class="font-semibold text-[var(--ink)]">What I saw:</b> {{ saw }}</p>
+        <div v-if="!live && selBlocker && !startFail" class="flex items-center gap-3 rounded-2xl surface px-4 py-3">
+          <p class="flex-1 text-[14px] leading-[1.55]">I need to sign in as <b class="font-semibold">{{ selBlocker.label.split(/[;,(]| who | that /)[0]!.trim() }}</b> before I can check this.</p>
+          <button class="btn-blue shrink-0" @click="openSettings()">Sign in</button>
+        </div>
+        <p v-else-if="!live && saw && !startFail" class="selectable text-[14px] leading-[1.55] text-[#333] text-pretty"><b class="font-semibold text-[var(--ink)]">{{ selItem?.status === 'unverified' ? "Why it didn't run:" : 'What I saw:' }}</b> {{ saw }}</p>
         <template v-if="!live && selFlow && selFlow.status !== 'pass'">
           <p v-if="selFlow.expected" class="selectable text-[13px] text-[var(--muted)]">Expected: {{ selFlow.expected }}</p>
         </template>

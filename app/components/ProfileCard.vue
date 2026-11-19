@@ -11,6 +11,8 @@ function plain(head: string, line: string) {
     .replace(/^Ready when:\s*/i, "It's ready when ")
     .replace(/^Seed:\s*none\b\s*/i, 'No test data to set up ')
     .replace(/^Seed:\s*/i, 'Test data: ')
+    .replace(/^Browser:\s*not needed.*$/i, 'No browser needed: I test it by sending it requests')
+    .replace(/^Browser:\s*needed.*$/i, 'I test it in a browser, the way a person uses it')
   if (head === 'Personas') return line.replace(/^[\w-]+:\s*/, '')
   return line
 }

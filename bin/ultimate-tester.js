@@ -69,18 +69,20 @@ function collectChange(commit, range) {
 }
 
 async function runTester(prompt, runDir) {
-  const browser = await startBrowser(runDir);
+  // A backend with no pages ("- Browser: not needed" under Start) is tested with requests only: no browser at all.
+  const noBrowser = /^- Browser:\s*not needed/im.test(readFileSync(PROFILE, 'utf8'));
+  const browser = noBrowser ? null : await startBrowser(runDir);
   const browserArgs = browser ? ['--cdp-endpoint', browser.endpoint] : ['--headless', '--isolated'];
   const mcpFile = join(runDir, 'mcp.json');
   writeFileSync(mcpFile, JSON.stringify({
-    mcpServers: { playwright: { command: 'npx', args: ['-y', PLAYWRIGHT_MCP, ...browserArgs, '--output-dir', runDir] } },
+    mcpServers: noBrowser ? {} : { playwright: { command: 'npx', args: ['-y', PLAYWRIGHT_MCP, ...browserArgs, '--output-dir', runDir] } },
   }));
   const args = [
     '-p', '--model', MODEL, '--output-format', 'stream-json', '--verbose', '--no-session-persistence',
     '--setting-sources', '', // no project hooks (no recursion) and no user plugins
     '--strict-mcp-config', '--mcp-config', mcpFile,
     '--json-schema', JSON.stringify(VERDICT_SCHEMA),
-    '--allowedTools', 'Bash', 'Read', 'Glob', 'Grep', 'mcp__playwright',
+    '--allowedTools', 'Bash', 'Read', 'Glob', 'Grep', ...(noBrowser ? [] : ['mcp__playwright']),
     '--disallowedTools', 'Edit', 'Write', 'NotebookEdit',
   ];
   return new Promise((resolve) => {
@@ -190,6 +192,7 @@ async function setupEnv(source) {
     .replace('{{PERSONAS}}', () => personaLines())
     .replaceAll('{{AS}}', `node ${JSON.stringify(SELF)} as`)
     .replaceAll('{{PORT}}', String(port))
+    .replaceAll('{{NUXT_OWN_BUILD}}', JSON.stringify(join(HOME, 'own-build', 'nuxt')))
     .replaceAll('{{RUN_DIR}}', () => runDir)
     .replace('{{NEEDS}}', () => [...items].map(([need, checks]) => `- ${need} (for: ${checks.join('; ')})`).join('\n'));
 
@@ -245,6 +248,7 @@ async function run({ commit = null, range = null, dedupe = false, note = '' } = 
     .replace('{{PERSONAS}}', () => personaLines())
     .replaceAll('{{AS}}', `node ${JSON.stringify(SELF)} as`)
     .replaceAll('{{PORT}}', String(port))
+    .replaceAll('{{NUXT_OWN_BUILD}}', JSON.stringify(join(HOME, 'own-build', 'nuxt')))
     .replaceAll('{{RUN_DIR}}', () => runDir)
     .replace('{{NOTE}}', () => note.trim() || 'None.')
     .replace('{{HISTORY}}', () => recentRuns(past))
