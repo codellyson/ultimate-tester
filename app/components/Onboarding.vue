@@ -10,13 +10,17 @@ const top = ref<HTMLElement>()
 async function go(n: number) { if (!(await leaveDraft())) return; step.value = n; nextTick(() => top.value?.scrollTo({ top: 0 })) }
 
 // 0 · Is this Mac ready?
-type Preflight = { claude: { ok: boolean, plan: string | null, apiKey: boolean }, chrome: boolean, node: string }
+type Preflight = { claude: { ok: boolean, installed?: boolean, plan: string | null, apiKey: boolean }, chrome: boolean, node: string }
 const pre = ref<Preflight | null>(null)
 onMounted(async () => { if (step.value === 0) pre.value = await api<Preflight>('/api/preflight').catch(() => null) })
 const nodeOk = computed(() => Number(pre.value?.node.split('.')[0]) >= 20)
 // Setup can't work without Claude Code signed in and Chrome; don't let someone start and fail minutes later.
 const ready = computed(() => !!pre.value?.claude.ok && !!pre.value?.chrome)
 async function recheck() { pre.value = await api<Preflight>('/api/preflight').catch(() => null) }
+// Coming back from Terminal or a download re-checks by itself; "Check again" stays for anyone who looks first.
+const onFocus = () => { if (step.value === 0 && pre.value && !ready.value) recheck() }
+onMounted(() => window.addEventListener('focus', onFocus))
+onBeforeUnmount(() => window.removeEventListener('focus', onFocus))
 const plan = computed(() => {
   const c = pre.value?.claude
   if (!c?.ok) return ''
@@ -103,18 +107,21 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
         <ul class="rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)]" aria-label="Is this Mac ready">
           <li v-if="!pre" class="px-4 py-2.5 text-[var(--muted)]">Checking this Mac…</li>
           <template v-else>
-            <li class="px-4 py-2.5 flex items-center gap-2 flex-wrap">
-              <span :class="pre.claude.ok ? 'text-[var(--ok)]' : 'text-[var(--bad)]'" aria-hidden="true"><component :is="pre.claude.ok ? CheckCircleIcon : XCircleIcon" class="size-4" /></span>
-              <span>{{ pre.claude.ok ? 'Claude Code is signed in' : 'Claude Code is not signed in. Run claude in a terminal and sign in, then come back.' }}</span>
+            <li class="px-4 py-2.5 flex items-start gap-2">
+              <span :class="['mt-[3px] shrink-0', pre.claude.ok ? 'text-[var(--ok)]' : 'text-[var(--bad)]']" aria-hidden="true"><component :is="pre.claude.ok ? CheckCircleIcon : XCircleIcon" class="size-4" /></span>
+              <span v-if="pre.claude.ok">Claude Code is signed in</span>
+              <span v-else-if="pre.claude.installed === false" class="selectable">Claude Code isn't installed. I run on it. In Terminal, run <code class="rounded-md bg-[#f3f3f3] px-1.5 py-0.5 text-[12.5px]">npm install -g @anthropic-ai/claude-code</code>, then <code class="rounded-md bg-[#f3f3f3] px-1.5 py-0.5 text-[12.5px]">claude</code> to sign in, and come back.</span>
+              <span v-else class="selectable">Claude Code isn't signed in. In Terminal, run <code class="rounded-md bg-[#f3f3f3] px-1.5 py-0.5 text-[12.5px]">claude</code> and sign in, then come back.</span>
               <span v-if="plan" class="text-[11px] rounded-full bg-[var(--sand)] text-[var(--muted)] px-2 py-0.5">{{ plan }}</span>
             </li>
-            <li class="px-4 py-2.5 flex items-center gap-2">
-              <span :class="pre.chrome ? 'text-[var(--ok)]' : 'text-[var(--bad)]'" aria-hidden="true"><component :is="pre.chrome ? CheckCircleIcon : XCircleIcon" class="size-4" /></span>
-              <span>{{ pre.chrome ? 'Google Chrome found' : 'Google Chrome not found. Install it; I drive Chrome to test.' }}</span>
+            <li class="px-4 py-2.5 flex items-start gap-2">
+              <span :class="['mt-[3px] shrink-0', pre.chrome ? 'text-[var(--ok)]' : 'text-[var(--bad)]']" aria-hidden="true"><component :is="pre.chrome ? CheckCircleIcon : XCircleIcon" class="size-4" /></span>
+              <span v-if="pre.chrome">Google Chrome found</span>
+              <span v-else class="selectable">Google Chrome isn't installed. I test your app in Chrome. Get it from <b>google.com/chrome</b>, then come back.</span>
             </li>
             <li class="px-4 py-2.5 flex items-center gap-2">
               <span :class="nodeOk ? 'text-[var(--ok)]' : 'text-[var(--warn)]'" aria-hidden="true"><component :is="nodeOk ? CheckCircleIcon : ExclamationTriangleIcon" class="size-4" /></span>
-              <span>Node {{ pre.node.split('.')[0] }}{{ nodeOk ? '' : ': I need Node 20 or newer' }}</span>
+              <span>Node {{ pre.node.split('.')[0] }}{{ nodeOk ? '' : ': I need Node 20 or newer. Get the LTS version from nodejs.org, then come back.' }}</span>
             </li>
           </template>
         </ul>

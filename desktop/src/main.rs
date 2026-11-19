@@ -36,10 +36,18 @@ fn engine_port() -> Port {
     if body.contains("\"service\":\"ultimate-tester\"") { Port::Ours } else { Port::Other }
 }
 
+// Set when the shell could not find `node` (exit 127): the engine can never start, so the launch page says why.
+static NO_NODE: AtomicBool = AtomicBool::new(false);
+
 // Asked by the launch page before it opens the engine.
 #[tauri::command]
 fn engine_status() -> &'static str {
-    match engine_port() { Port::Ours => "ours", Port::Other => "other", Port::Free => "starting" }
+    match engine_port() {
+        Port::Ours => "ours",
+        Port::Other => "other",
+        Port::Free if NO_NODE.load(Ordering::Relaxed) => "no-node",
+        Port::Free => "starting",
+    }
 }
 
 // Starts the Node engine through the user's own shell, interactive and login (-ilc), so it gets the same
@@ -60,7 +68,9 @@ fn watch_engine(slot: Arc<Mutex<Option<Child>>>, cli: String) {
         // Start ours only when the port is free; never fight another program for it.
         if engine_port() == Port::Free {
             let mut child = slot.lock().unwrap();
-            let ours_alive = child.as_mut().map(|c| matches!(c.try_wait(), Ok(None))).unwrap_or(false);
+            let exited = child.as_mut().and_then(|c| c.try_wait().ok().flatten());
+            if exited.and_then(|s| s.code()) == Some(127) { NO_NODE.store(true, Ordering::Relaxed) }
+            let ours_alive = child.is_some() && exited.is_none();
             if !ours_alive {
                 *child = spawn_engine(&cli);
             }
