@@ -64,7 +64,8 @@ function collectChange(commit, range) {
   const tracked = git('diff', 'HEAD', '--name-only').split('\n').filter(Boolean);
   const untracked = git('ls-files', '--others', '--exclude-standard').split('\n').filter(Boolean);
   const diff = [git('diff', 'HEAD'), ...untracked.map((f) => `--- new file: ${f}`)].join('\n');
-  return { mode: 'uncommitted changes', files: [...tracked, ...untracked], diff, message: '(not committed yet)' };
+  // Tess's own plan file isn't the person's change.
+  return { mode: 'uncommitted changes', files: [...tracked, ...untracked].filter((f) => f !== PROFILE), diff, message: '(not committed yet)' };
 }
 
 async function runTester(prompt, runDir) {

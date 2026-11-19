@@ -13,7 +13,7 @@ export type RunDetail = RunInfo & {
 export type General = { model: 'opus' | 'sonnet', timeoutMin: number, notifications: boolean }
 export type Persona = { key: string, label: string, signIn: boolean, savedAt: string | null }
 export type Setup = {
-  profile: string, profileHash: string, profileReady: boolean, onboarded: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
+  profile: string, profileHash: string, profileReady: boolean, onboarded: boolean, changed?: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
   personas: Persona[], allSignedIn: boolean, signingIn: string | null, running: boolean,
   job: { kind: string | null, status: string, message: string, steps: string[] }
 }
@@ -231,7 +231,9 @@ function onMenu(id: string) {
 async function addApp() {
   state.menu = null
   const t = tauri()
-  const path = t?.dialog ? await t.dialog.open({ directory: true, title: "Choose your app's repo folder" }) : await askText({ title: 'Add an app', message: "The folder of your app's git repo.", okLabel: 'Add', input: { placeholder: '~/code/my-app' } })
+  const typed = () => askText({ title: 'Add an app', message: "The folder of your app's git repo.", okLabel: 'Add', input: { placeholder: '~/code/my-app' } })
+  const path = t?.dialog ? await t.dialog.open({ directory: true, title: "Choose your app's repo folder" })
+    : await api<{ path: string | null }>('/api/pick-folder', {}).then((r) => r.path, typed)
   if (!path) return
   try { const a = await api<App>('/api/apps', { path }); await loadApps(); selectApp(a.id) } catch (e) { state.flash = (e as Error).message }
 }

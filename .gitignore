@@ -9,3 +9,4 @@ desktop/engine/
 .impeccable/evidence/
 .impeccable/critique/
 site/public/download/*.dmg
+site/dist/

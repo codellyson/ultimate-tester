@@ -50,8 +50,9 @@ const needs = computed(() => s.value?.personas.filter((p) => p.signIn && !p.save
 
 // 4 · When to test, then the first test.
 const trigger = ref<'stop' | 'commit' | 'manual'>(s.value?.triggers.commit && !s.value.triggers.stop ? 'commit' : 'stop')
-const target = ref(0)
 const targets = computed(() => targetsFor(s.value?.remotes).slice(0, 3))
+// Nothing changed yet: start on the last commit so the first test has something to look at.
+const target = ref(s.value?.changed === false ? Math.max(0, targets.value.findIndex((t) => t.kind === 'commit')) : 0)
 const starting = ref(false)
 async function begin() {
   starting.value = true

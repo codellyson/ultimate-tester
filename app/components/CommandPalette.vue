@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Grouped, with "Open" first: nothing that starts a run is ever the default.
-const { state, openRun, openSettings, startTest, rerun, stopTest, selectApp, addApp } = useTester()
+const { state, openRun, openSettings, startTest, rerun, stopTest, selectApp, addApp, show } = useTester()
 const q = ref('')
 const sel = ref(-1)
 const input = ref<HTMLInputElement>()
@@ -13,6 +13,7 @@ const commands = computed<Cmd[]>(() => {
   state.runs.slice(0, 8).forEach((r, i) => list.push({ group: 'Open', label: `${short(r.title)} · ${when(r.id)} · ${statusOf(r.status).word}`, hint: i < 4 ? `⌘${i + 1}` : '', run: () => openRun(r.id) }))
   list.push({ group: 'Open', label: 'Home: all your apps', run: () => { state.home = true } })
   list.push({ group: 'Open', label: 'Settings: how Tess tests this app', hint: '⌘,', run: () => openSettings() })
+  if (state.appId) list.push({ group: 'Open', label: 'Getting started: set up Tess for this app', run: () => show('onboard') })
   if (state.view === 'run' && state.detail?.change) list.push({ group: 'Test', label: 'Run this test again', hint: '⌘R', run: rerun })
   if (state.setup?.running) list.push({ group: 'Test', label: 'Stop the running test', hint: '⌘.', run: stopTest })
   for (const t of targetsFor(state.setup?.remotes)) list.push({ group: 'Test', label: `Test ${t.label.toLowerCase()}`, hint: t.hint, run: () => startTest(t) })

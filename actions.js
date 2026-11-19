@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseStart, withPort, parsePersonas, addToSection, setSection } from './lib.js';
+import { parseStart, withPort, parsePersonas, addToSection, setSection, shouldSkip } from './lib.js';
 import { signInWindow, freePort } from './live.js';
 
 // UT_HOME is set by `ultimate-tester serve`; once Nitro bundles this file, import.meta.url no longer points at the repo.
@@ -75,6 +75,11 @@ export function createActions(root) {
     };
   };
   const busy = () => job.status === 'working';
+  // Uncommitted files except Tess's own plan; null in a repo with no commit yet (no HEAD to compare with).
+  const changedFiles = () => {
+    const git = (...a) => execFileSync('git', a, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean);
+    try { return [...git('diff', 'HEAD', '--name-only'), ...git('ls-files', '--others', '--exclude-standard')].filter((f) => f !== '.ultimate-tester.md'); } catch { return null; }
+  };
 
   return {
     status() {
@@ -91,9 +96,11 @@ export function createActions(root) {
         profileReady,
         // Which version of the profile this page is showing; a save based on an older one is refused.
         profileHash: createHash('sha1').update(profile).digest('hex'),
-        // An app with a finished test plan is set up, whether or not it went through getting started or has tests.
-        onboarded: existsSync(join(state, 'onboarded')) || profileReady,
+        // Set up only once the person finishes getting started; a drafted plan alone is not checked yet.
+        onboarded: existsSync(join(state, 'onboarded')),
         triggers: triggers(),
+        // Whether "My changes" has anything to test, so the first test can default to the last commit.
+        changed: !!changedFiles()?.length,
         // Remote branches, so release choices only show for branches this repo has.
         remotes: remoteBranches(),
         start: parseStart(profile),
@@ -249,6 +256,13 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
       const args = kind === 'setup' ? ['--setup', target] : kind === 'commit' ? ['--commit', target || 'HEAD'] : kind === 'range' ? ['--range', target] : [];
       if (kind === 'range' && !/^[\w./-]+\.\.[\w./-]+$/.test(target ?? '')) throw new Error('A release is two refs, like origin/prd..HEAD');
       if (kind === 'commit' && target && !/^[\w./-]+$/.test(target)) throw new Error('That is not a commit or branch name');
+      // Say so up front instead of starting a test that stops at once with nothing to show.
+      if (kind === 'changes') {
+        const files = changedFiles();
+        const skip = files && shouldSkip(files);
+        if (skip === 'no changes') throw new Error("You haven't changed anything since the last commit. Make a change, or test the last commit.");
+        if (skip) throw new Error('You only changed docs, so there is nothing for me to click through. Test the last commit instead.');
+      }
       // Detached so a test keeps going if the app or engine restarts mid-run.
       if (note?.trim()) args.push('--note', note.trim());
       run = spawn(process.execPath, [CLI, 'run', ...args], { cwd: root, stdio: 'ignore', detached: true, env: childEnv() });

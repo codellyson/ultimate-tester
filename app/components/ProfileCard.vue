@@ -72,10 +72,10 @@ watch(draft, () => { escArmed.value = false })
           <p v-else-if="!row.lines.length || /^\(.*\)$/.test(row.lines.flat().join('').trim())" class="text-[var(--muted)]">{{ EMPTY[row.head] ?? 'Nothing here yet.' }}</p>
           <p v-for="(bits, i) in row.lines" v-else :key="i" :class="row.head === 'Must never break' && 'flex gap-2'">
             <span v-if="row.head === 'Must never break'" class="size-1.5 rounded-full bg-[var(--muted)] shrink-0 mt-[7px]" aria-hidden="true" />
-            <template v-for="(bit, j) in bits" :key="j">
-              <code v-if="bit.startsWith('`')" class="mono text-[12px] rounded bg-[var(--sand)] px-1.5 py-0.5">{{ bit.slice(1, -1) }}</code>
+            <span class="min-w-0"><template v-for="(bit, j) in bits" :key="j">
+              <code v-if="bit.startsWith('`')" class="text-[12.5px] rounded-md bg-[#f3f3f3] px-1.5 py-0.5">{{ bit.slice(1, -1) }}</code>
               <template v-else>{{ bit }}</template>
-            </template>
+            </template></span>
           </p>
         </div>
         <button v-if="editing === null" class="link-quiet text-[12px] self-start shrink-0" :aria-label="`Edit ${row.label}`" @click="edit(row.head)">{{ row.head in sections ? 'Edit' : 'Add' }}</button>
