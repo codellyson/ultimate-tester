@@ -105,7 +105,7 @@ export function parsePersonas(md) {
   const sec = md.split(/^## /m).find((s) => /^Personas\b/.test(s));
   if (!sec) return [{ key: 'default', label: 'Anyone (no saved sign-in)', signIn: false }];
   return sec.split('\n').slice(1).map((l) => l.match(/^\s*-\s*`?([a-z0-9][a-z0-9-]*)`?\s*:\s*(.+)$/i)).filter(Boolean)
-    .map(([, key, label]) => ({ key: key.toLowerCase(), label: label.trim(), signIn: !/\b(no sign-in|signed[- ]out|not signed in|guest)\b/i.test(label) }));
+    .map(([, key, label]) => ({ key: key.toLowerCase(), label: label.trim(), signIn: !/\b(no sign-in|signed[- ]out|not signed in|guest|fresh account each run)\b/i.test(label) }));
 }
 
 // Moves the profile's app port to `port`, so a run never lands on a server someone else started.

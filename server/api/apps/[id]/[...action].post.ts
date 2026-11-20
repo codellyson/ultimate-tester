@@ -8,6 +8,9 @@ export default defineEventHandler(async (event) => {
       case 'draft': a.draftProfile().catch(() => {}); break // keeps going; the page polls setup
       case 'answer': a.answer(body.field, (body as Record<string, unknown>).value); break
       case 'keep': a.keep(body.field); break
+      case 'convert': a.convertPlan().catch(() => {}); break // keeps going; the page polls setup
+      case 'use-converted': a.useConverted(); break
+      case 'drop-converted': a.dropConverted(); break
       case 'signin/start': a.signInStart(body.persona).catch(() => {}); break // keeps going; the page polls setup
       case 'signin/finish': await a.signInFinish(); break
       case 'run': a.startRun(body.kind, body.target, body.note); break

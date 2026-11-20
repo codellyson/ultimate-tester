@@ -88,7 +88,7 @@ export function planToMarkdown(p) {
       ...(p.neverRun?.length ? [`Never run: ${p.neverRun.map((c) => `\`${c}\``).join(', ')}`] : []),
     ]),
     lines('Test accounts', accounts.length ? accounts : ['None needed.']),
-    lines('Personas', p.personas.map((x) => `${x.key}: ${x.who}${x.signIn === 'saved' ? '' : ', no sign-in'}`)),
+    lines('Personas', p.personas.map((x) => `${x.key}: ${x.who}${x.signIn === 'saved' ? '' : x.signIn === 'signUp' ? ', fresh account each run' : ', no sign-in'}`)),
     lines('Must never break', p.mustNeverBreak.map((m) => `${m.check}${m.as ? ` (as ${m.as}` : ''}${m.startAt ? `${m.as ? ', ' : ' ('}start at ${m.startAt}` : ''}${m.as || m.startAt ? ')' : ''}`)),
     lines('Existing checks', p.ownTests ? [`Only the test files a change adds or edits, run one at a time with \`${inDir(p.ownTests.command, p.ownTests.cwd)}\`. Never the full suites.`] : []),
     ...(p.backends?.length ? [lines('Backends', p.backends.map((b) => `${b.name}: ${b.repo}, set ${b.env}, when missing: ${b.whenMissing === 'dev' ? 'use the dev one' : 'stop'}`))] : []),

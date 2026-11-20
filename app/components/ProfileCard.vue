@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // The profile Markdown as a readable card: one row per section, each editable in place.
-const props = defineProps<{ profile: string, basic?: boolean }>()
+const props = defineProps<{ profile: string, basic?: boolean, readonly?: boolean }>()
 const { state, setupAction } = useTester()
 // A JSON plan is read here and edited in its file for now (the card writes Markdown plans only).
-const isJson = computed(() => state.setup?.planFormat === 'json')
+const isJson = computed(() => props.readonly || state.setup?.planFormat === 'json')
 const LABELS: [string, string][] = [['Start', 'Starting your app'], ['Allowed URLs', 'Pages I may open'], ['Test accounts', 'Signing in'], ['Personas', 'Who I test as'], ['Must never break', 'Must always work'], ['Existing checks', 'Your own tests'], ['Notes for Tess', 'Notes for me'], ['Lessons', 'Corrections']]
 // The file stays in the terse form Tess reads; the card says the same thing in plain words.
 function plain(head: string, line: string) {
@@ -96,7 +96,7 @@ watch(draft, () => { escArmed.value = false })
         <button v-if="editing === null && !isJson" class="link-quiet text-[12px] self-start shrink-0" :aria-label="`Edit ${row.label}`" @click="edit(row.head)">{{ row.head in sections ? 'Edit' : 'Add' }}</button>
       </div>
       <div class="px-5 py-3 text-[12px] text-[var(--muted)] flex gap-3">
-        <span>Saved as {{ isJson ? '.ultimate-tester.json' : '.ultimate-tester.md' }} in the repo{{ isJson ? '. Edit that file to change it.' : '' }}</span>
+        <span>{{ props.readonly ? 'Not saved yet.' : `Saved as ${isJson ? '.ultimate-tester.json' : '.ultimate-tester.md'} in the repo${isJson ? '. Edit that file to change it.' : ''}` }}</span>
         <button v-if="editing === null && !isJson" class="link-quiet ms-auto" @click="edit('*')">Open as Markdown</button>
       </div>
     </template>

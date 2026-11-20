@@ -5,6 +5,7 @@ const { state, setupAction, startTest } = useTester()
 const s = computed(() => state.setup!)
 const app = computed(() => state.apps.find((a) => a.id === state.appId)!)
 const drafting = computed(() => s.value.job.kind === 'draft' && s.value.job.status === 'working')
+const converting = computed(() => s.value.job.kind === 'convert' && s.value.job.status === 'working')
 const needs = computed(() => s.value.personas.filter((p) => p.signIn && !p.savedAt))
 const signIns = computed(() => s.value.personas.filter((p) => p.signIn))
 
@@ -85,6 +86,26 @@ const left = computed(() => steps.value.filter((x) => !x.done).length)
           </Transition>
         </li>
       </ul>
+
+      <!-- An old Markdown plan: offer to turn it into the checked JSON plan, and show the result before using it. -->
+      <div v-if="s.planFormat === 'md' && s.profileReady" class="rounded-2xl surface px-5 py-4 flex flex-col gap-3">
+        <template v-if="s.proposal">
+          <p class="text-[15px] leading-relaxed">Here's your plan as <code class="rounded-md bg-[var(--code)] px-1.5 py-0.5 text-[12.5px]">.ultimate-tester.json</code>. Check it; nothing changes until you use it.{{ s.proposal.questions ? ` I'll then ask ${s.proposal.questions === 1 ? 'one thing' : `${s.proposal.questions} things`} I couldn't tell from the old plan.` : '' }}</p>
+          <ProfileCard :profile="s.proposal.text" readonly />
+          <div class="flex gap-2">
+            <button class="btn-blue" @click="setupAction('use-converted')">Use the new plan</button>
+            <button class="btn" @click="setupAction('drop-converted')">Not now</button>
+          </div>
+        </template>
+        <template v-else-if="converting">
+          <TessSays>Turning your plan into JSON and checking it. About a minute.</TessSays>
+        </template>
+        <template v-else>
+          <p class="text-[15px] leading-relaxed">This plan is in the old format. I can turn it into a checked JSON plan, so every answer has its place and your team gets the same one from the repo.</p>
+          <div><button class="btn" @click="setupAction('convert')">Convert it</button></div>
+          <p v-if="s.job.kind === 'convert' && s.job.status === 'error'" class="text-[13px] text-[var(--muted)]">{{ s.job.message }}</p>
+        </template>
+      </div>
 
       <!-- Settings only configures; tests start from the main window (⌘N), so this window never turns into a test. -->
       <div v-if="s.profileReady && !state.confirmJustDrafted && !needs.length && !state.inSettings" class="flex flex-wrap items-center gap-2">

@@ -1,12 +1,12 @@
 // What the window's Setup screen and run buttons can do, for one repo.
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseStart, withPort, parsePersonas, shouldSkip } from './lib.js';
 import { signInWindow, freePort } from './live.js';
-import { readPlan, addLesson as planLesson, setNotes as planNotes, PLAN_FILES, planSchema, validate, savePlanJson, answerPlan, getAt, schemaAt } from './plan.js';
+import { readPlan, addLesson as planLesson, setNotes as planNotes, PLAN_FILES, planSchema, validate, savePlanJson, answerPlan, getAt, schemaAt, planToMarkdown, PLAN_MD } from './plan.js';
 
 // UT_HOME is set by `ultimate-tester serve`; once Nitro bundles this file, import.meta.url no longer points at the repo.
 const HOME = process.env.UT_HOME ?? dirname(fileURLToPath(import.meta.url));
@@ -130,6 +130,8 @@ export function createActions(root) {
         profileReady,
         // Which file holds the plan, and what's wrong with it if it fails its schema (then nothing is tested).
         planFormat: plan.format,
+        // A converted JSON plan waiting to be checked and used (the old .md still runs until then).
+        proposal: plan.format === 'md' && proposal() ? { text: planToMarkdown(proposal().plan), questions: (proposal().unsure ?? []).length } : null,
         planErrors: plan.errors,
         // What Tess couldn't work out from the repo, asked once in setup (a JSON plan only).
         questions: plan.format === 'json' ? questions().map((q) => ({ ...q, value: getAt(plan.json, q.field), ...answerShape(q.field) })) : [],
@@ -173,16 +175,8 @@ export function createActions(root) {
       return draftPlan().catch((e) => set('draft', 'error', `Tess could not draft the plan: ${e.message}`, job.steps));
     },
   };
-  async function draftPlan() {
-      const rel = (f = '') => f.startsWith(root) ? f.slice(root.length + 1) : f;
-      const say = (t) => { if (t && job.steps.at(-1) !== t) job.steps = [...job.steps, t].slice(-40); };
-      const onTool = (name, i) => say(name === 'Read' ? `Reading ${rel(i.file_path)}` : name === 'Grep' ? `Searching for “${i.pattern}”` : name === 'Glob' ? `Looking for ${i.pattern}` : null);
-      const out = { type: 'object', required: ['plan', 'unsure'], properties: { plan: { type: 'string' }, unsure: { type: 'array', items: { type: 'object', required: ['field', 'question'], properties: { field: { type: 'string' }, question: { type: 'string' } } } } } };
-      const ask = `Read this repository (package.json, README, CLAUDE.md or AGENTS.md, .claude/launch.json, .env.example) and write its Ultimate Tester test plan: JSON that passes this JSON Schema exactly. Return the JSON as text in "plan".
-
-${JSON.stringify(planSchema())}
-
-Rules:
+  // How Tess writes a plan, shared by drafting from a repo and converting an old Markdown plan.
+  const PLAN_RULES = `Rules:
 - start.command runs the app locally and contains {port}; start.port is a port nothing else in the repo uses; start.readyUrl is http://localhost:{port} plus a path (a health route when there are no pages). Settings the command needs go in start.env, never secrets.
 - browser is false when the app has no pages a person uses (only an API, worker or backend); then every persona's signIn is "none" (keys come from the local env file) and personas are the kinds of caller.
 - urls.allowed: dev hosts the app calls besides localhost (or just "localhost"). urls.never: production hosts you find. neverRun: deploy, publish and push commands you find in package.json scripts, plus "git push".
@@ -194,21 +188,46 @@ Rules:
 - Every string is plain words someone who isn't a developer can follow ("Add a note and see it in the list", not "POST /notes returns 302").
 
 In "unsure", list each answer you could not work out from the repo (the schema marks the usual ones with x-ask): "field" is its path, like "personas[2].signIn", "urls.never" or "mustNeverBreak"; "question" is the plain question to ask the developer. Still fill those fields with your best guess so the plan passes the schema.`;
-      let draft = await askClaude(ask, out, ['Read', 'Glob', 'Grep'], onTool);
-      let json = null, errors = ['Tess returned no plan'];
-      const check = () => { try { json = JSON.parse(draft.plan); errors = validate(json); } catch (e) { errors = [`not valid JSON: ${e.message}`]; } };
-      if (draft) check();
-      // One repair round: show Tess exactly what fails the schema and let her fix only that.
-      if (draft && errors.length) {
-        say('Fixing the plan so it passes its schema');
-        const fixed = await askClaude(`This test plan fails its JSON Schema:\n${errors.slice(0, 20).map((x) => `- ${x}`).join('\n')}\n\nPlan:\n${draft.plan}\n\nSchema:\n${JSON.stringify(planSchema())}\n\nReturn the corrected plan as text in "plan", changing only what the problems need.`, { type: 'object', required: ['plan'], properties: { plan: { type: 'string' } } }, [], () => {});
-        if (fixed) { draft = { ...draft, plan: fixed.plan }; check(); }
-      }
-      if (errors.length) return set('draft', 'error', `Tess could not draft a plan that passes its schema: ${errors[0]}`, job.steps);
-      savePlanJson(root, json);
-      mkdirSync(state, { recursive: true });
-      writeFileSync(join(state, 'questions.json'), JSON.stringify((draft.unsure ?? []).filter((q) => getAt(json, q.field) !== undefined), null, 2));
-      set('draft', 'done', 'Drafted. Read it and fix anything wrong.', job.steps);
+  const PLAN_OUT = { type: 'object', required: ['plan', 'unsure'], properties: { plan: { type: 'string' }, unsure: { type: 'array', items: { type: 'object', required: ['field', 'question'], properties: { field: { type: 'string' }, question: { type: 'string' } } } } } };
+  const say = (t) => { if (t && job.steps.at(-1) !== t) job.steps = [...job.steps, t].slice(-40); };
+  const rel = (f = '') => f.startsWith(root) ? f.slice(root.length + 1) : f;
+  const onTool = (name, i) => say(name === 'Read' ? `Reading ${rel(i.file_path)}` : name === 'Grep' ? `Searching for “${i.pattern}”` : name === 'Glob' ? `Looking for ${i.pattern}` : null);
+  // Tess writes a plan, the validator checks it, and she gets one repair round with the exact problems.
+  // Resolves to { json, unsure } or { errors }; nothing is saved here.
+  async function planFromClaude(ask, tools) {
+    let draft = await askClaude(`${ask}\n\n${JSON.stringify(planSchema())}\n\n${PLAN_RULES}`, PLAN_OUT, tools, onTool);
+    let json = null, errors = ['Tess returned no plan'];
+    const check = () => { try { json = JSON.parse(draft.plan); errors = validate(json); } catch (e) { errors = [`not valid JSON: ${e.message}`]; } };
+    if (draft) check();
+    if (draft && errors.length) {
+      say('Fixing the plan so it passes its schema');
+      const fixed = await askClaude(`This test plan fails its JSON Schema:\n${errors.slice(0, 20).map((x) => `- ${x}`).join('\n')}\n\nPlan:\n${draft.plan}\n\nSchema:\n${JSON.stringify(planSchema())}\n\nReturn the corrected plan as text in "plan", changing only what the problems need.`, { type: 'object', required: ['plan'], properties: { plan: { type: 'string' } } }, [], () => {});
+      if (fixed) { draft = { ...draft, plan: fixed.plan }; check(); }
+    }
+    if (errors.length) return { errors };
+    return { json, unsure: (draft.unsure ?? []).filter((q) => getAt(json, q.field) !== undefined) };
+  }
+  const saveQuestions = (list) => { mkdirSync(state, { recursive: true }); writeFileSync(questionsFile, JSON.stringify(list, null, 2)); };
+
+  async function draftPlan() {
+    const r = await planFromClaude('Read this repository (package.json, README, CLAUDE.md or AGENTS.md, .claude/launch.json, .env.example) and write its Ultimate Tester test plan: JSON that passes this JSON Schema exactly. Return the JSON as text in "plan".', ['Read', 'Glob', 'Grep']);
+    if (r.errors) return set('draft', 'error', `Tess could not draft a plan that passes its schema: ${r.errors[0]}`, job.steps);
+    savePlanJson(root, r.json);
+    saveQuestions(r.unsure);
+    set('draft', 'done', 'Drafted. Read it and fix anything wrong.', job.steps);
+  }
+
+  // An old .ultimate-tester.md becomes a proposed JSON plan. Nothing changes until the person uses it;
+  // until then the .md keeps working.
+  const proposalFile = join(state, 'proposed-plan.json');
+  const proposal = () => { try { return JSON.parse(readFileSync(proposalFile, 'utf8')); } catch { return null; } };
+  async function convertPlan() {
+    const md = readPlan(root).text;
+    const r = await planFromClaude(`Turn this Ultimate Tester test plan from its old Markdown form into JSON that passes the JSON Schema below. Keep every fact it states: the start command, ports, test data, hosts to avoid, commands never to run, every person, every must-never-break item, every note, lesson and test-data recipe, worded the same where you can. You may read the repo to fill gaps (like the port or where a command runs). Return the JSON as text in "plan".\n\nOld plan:\n${md}`, ['Read', 'Glob', 'Grep']);
+    if (r.errors) return set('convert', 'error', `Tess could not convert the plan: ${r.errors[0]}`, job.steps);
+    mkdirSync(state, { recursive: true });
+    writeFileSync(proposalFile, JSON.stringify({ plan: r.json, unsure: r.unsure }, null, 2));
+    set('convert', 'done', 'Converted. Check it, then use it.', job.steps);
   }
   Object.assign(api, {
     // A question from the draft, answered: written into the plan (checked against the schema) and crossed off.
@@ -219,6 +238,22 @@ In "unsure", list each answer you could not work out from the repo (the schema m
     },
     // "Keep your guess": the draft's answer stays as it is.
     keep(field) { keepGuess(field); },
+    convertPlan() {
+      if (busy()) throw new Error('Something else is still working');
+      if (readPlan(root).format !== 'md') throw new Error('There is no old plan to convert');
+      set('convert', 'working', 'Tess is turning your plan into JSON…');
+      return convertPlan().catch((e) => set('convert', 'error', `Tess could not convert the plan: ${e.message}`, job.steps));
+    },
+    // Use the converted plan: the JSON is written (checked again), its questions queued, and the old .md removed.
+    useConverted() {
+      const p = proposal();
+      if (!p) throw new Error('There is no converted plan to use');
+      savePlanJson(root, p.plan);
+      saveQuestions(p.unsure ?? []);
+      try { unlinkSync(join(root, PLAN_MD)); } catch {}
+      try { unlinkSync(proposalFile); } catch {}
+    },
+    dropConverted() { try { unlinkSync(proposalFile); } catch {} },
   });
   const rest = {
 
