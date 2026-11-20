@@ -22,6 +22,8 @@ NOTES="$NOTES" SIG=$(cat "$B/macos/Ultimate Tester.app.tar.gz.sig") VERSION="$VE
   URL="https://github.com/$REPO/releases/download/$TAG/UltimateTester.app.tar.gz" \
   node -e 'const e = process.env; console.log(JSON.stringify({ version: e.VERSION, notes: e.NOTES, pub_date: new Date().toISOString(), platforms: { "darwin-aarch64": { signature: e.SIG, url: e.URL } } }, null, 2))' > "$OUT/latest.json"
 
-gh release create "$TAG" -R "$REPO" --title "Ultimate Tester $VERSION" --notes "$NOTES" \
+# gh can't create the tag itself here (it asks for the "workflow" scope), so git pushes it first.
+git tag "$TAG" && git push -q origin "$TAG"
+gh release create "$TAG" -R "$REPO" --verify-tag --title "Ultimate Tester $VERSION" --notes "$NOTES" \
   "$OUT/UltimateTester.dmg" "$OUT/UltimateTester.app.tar.gz" "$OUT/latest.json"
 echo "Released $TAG: installed copies see it at their next launch."
