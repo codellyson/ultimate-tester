@@ -105,6 +105,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<(Menu<tauri::Wry>, MenuHa
     let menu = Menu::with_items(app, &[
         &Submenu::with_items(app, "Ultimate Tester", true, &[
             &PredefinedMenuItem::about(app, Some("About Ultimate Tester"), Some(about))?,
+            &item("check-updates", "Check for Updates…", None)?,
             &sep()?,
             &item("settings", "Settings…", Some("CmdOrCtrl+,"))?,
             &sep()?,
@@ -236,6 +237,56 @@ fn restore_frame(app: &tauri::AppHandle) {
     if on_screen { let _ = w.set_position(tauri::LogicalPosition::new(x, y)); }
 }
 
+// Updates: the app looks for a newer release at launch and on Check for Updates…, and tells the page,
+// which asks before installing. Payload: state "available" (version, notes), "latest" or "error" (message).
+// A launch check that finds nothing, or fails (offline), says nothing.
+fn check_update(app: tauri::AppHandle, asked: bool) {
+    use tauri_plugin_updater::UpdaterExt;
+    tauri::async_runtime::spawn(async move {
+        let mut out = std::collections::HashMap::new();
+        match app.updater().map_err(|e| e.to_string()) {
+            Ok(u) => match u.check().await {
+                Ok(Some(up)) => {
+                    out.insert("state", "available".to_string());
+                    out.insert("version", up.version.clone());
+                    out.insert("notes", up.body.clone().unwrap_or_default());
+                }
+                Ok(None) => { out.insert("state", "latest".into()); }
+                Err(e) => { out.insert("state", "error".into()); out.insert("message", e.to_string()); }
+            },
+            Err(e) => { out.insert("state", "error".into()); out.insert("message", e); }
+        }
+        if asked || out["state"] == "available" {
+            if asked { show_main(&app); }
+            let _ = app.emit_to("main", "update", out);
+        }
+    });
+}
+
+// Downloads and installs the update, stops our engine (the new app starts its own), and relaunches.
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?.ok_or("You already have the latest version.")?;
+    // The page's progress sheet: bytes so far and the total, at most once per percent; then "installing".
+    let (mut got, mut shown) = (0u64, u64::MAX);
+    let tell = app.clone();
+    let done = app.clone();
+    update.download_and_install(
+        move |chunk, total| {
+            got += chunk as u64;
+            let pct = total.map(|t| got * 100 / t.max(1)).unwrap_or(got / 1_000_000);
+            if pct != shown { shown = pct; let _ = tell.emit_to("main", "update-progress", (got, total)); }
+        },
+        move || { let _ = done.emit_to("main", "update-progress", "installing"); },
+    ).await.map_err(|e| e.to_string())?;
+    if let Some(mut child) = app.state::<Engine>().0.lock().unwrap().take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    app.restart();
+}
+
 fn show_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -251,10 +302,11 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Engine(slot))
         .manage(Testing(AtomicBool::new(false)))
         .manage(Draft(AtomicBool::new(false)))
-        .invoke_handler(tauri::generate_handler![open_settings, set_menu_state, engine_status, set_draft])
+        .invoke_handler(tauri::generate_handler![open_settings, set_menu_state, engine_status, set_draft, install_update])
         .setup(move |app| {
             // The engine shipped inside the app; a dev build without it runs the repo's copy.
             let cli = app.path().resource_dir().ok()
@@ -269,10 +321,14 @@ fn main() {
             app.manage(handles);
             build_settings(app.handle())?;
             restore_frame(app.handle());
+            // Give the page time to load before it can be told about an update.
+            let handle = app.handle().clone();
+            thread::spawn(move || { thread::sleep(Duration::from_secs(8)); check_update(handle, false) });
             Ok(())
         })
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
+            if id == "check-updates" { return check_update(app.clone(), true); }
             // Menu commands act on the main window, so bring it back if it was closed
             // (except Settings…, which opens its own window and shouldn't flash the main one forward).
             if id != "settings" { show_main(app); }

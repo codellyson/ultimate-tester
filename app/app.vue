@@ -49,5 +49,6 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); document.r
     </div>
     <template v-if="!state.inSettings"><CommandPalette /><CustomTestSheet /></template>
     <AskSheet />
+    <UpdateSheet v-if="!state.inSettings" />
   </div>
 </template>

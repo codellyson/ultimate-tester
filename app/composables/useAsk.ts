@@ -1,5 +1,5 @@
 // The app's own confirm and text prompt (never the browser's): one sheet at a time, answered with a promise.
-type Ask = { title: string, message?: string, okLabel: string, danger?: boolean, input?: { placeholder?: string } }
+type Ask = { title: string, message?: string, okLabel: string, danger?: boolean, single?: boolean, input?: { placeholder?: string } }
 export const asking = reactive<{ open: Ask | null, value: string, resolve: ((v: string | null) => void) | null }>({ open: null, value: '', resolve: null })
 
 function open(a: Ask) {

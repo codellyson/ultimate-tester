@@ -212,6 +212,23 @@ async function openSettings(tab: 'general' | 'app' | null = 'app') {
   try { await invoke('open_settings', { appId: state.appId }) } catch (e) { state.flash = String(e) }
 }
 
+// A newer Ultimate Tester, found by the Mac app at launch or from Check for Updates…: ask, then install and relaunch.
+type Update = { state: 'available' | 'latest' | 'error', version?: string, notes?: string, message?: string }
+// The progress sheet's state while an update downloads and installs.
+export const updating = reactive({ open: false, version: '', got: 0, total: null as number | null, installing: false })
+async function onUpdate(u: Update) {
+  if (u.state === 'latest') return askConfirm({ title: "You're on the latest version", okLabel: 'OK', single: true })
+  if (u.state === 'error') return askConfirm({ title: "Couldn't check for updates", message: u.message, okLabel: 'OK', single: true })
+  const testing = state.apps.some((a) => a.last?.status === 'running')
+  const message = [u.notes?.trim(), testing ? 'A test is running; it finishes in the background and its result is here after the restart.' : ''].filter(Boolean).join('\n\n')
+  if (!(await askConfirm({ title: `Ultimate Tester ${u.version} is ready`, message: message || undefined, okLabel: 'Install and Restart' }))) return
+  Object.assign(updating, { open: true, version: u.version, got: 0, total: null, installing: false })
+  await tauri()?.core?.invoke('install_update').catch((e) => {
+    updating.open = false
+    askConfirm({ title: "Couldn't install the update", message: String(e), okLabel: 'OK', single: true })
+  })
+}
+
 function onMenu(id: string) {
   const act: Record<string, () => void> = {
     'settings': () => openSettings(null),
@@ -317,6 +334,12 @@ async function boot() {
   if (!state.inSettings) watch(() => state.home, (h) => { if (h) history.replaceState(null, '', '/') })
   if (!state.inSettings) {
     t?.event?.listen('menu', (e) => onMenu(e.payload))
+    t?.event?.listen('update', (e) => onUpdate(e.payload as unknown as Update))
+    t?.event?.listen('update-progress', (e) => {
+      const p = e.payload as unknown as [number, number | null] | 'installing'
+      if (p === 'installing') updating.installing = true
+      else [updating.got, updating.total] = p
+    })
     window.addEventListener('focus', () => { unseenProblems = false; announce(state.apps) })
   }
   await loadApps().catch(() => {})

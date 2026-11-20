@@ -23,6 +23,7 @@
     "allow-set-menu-state",
     "allow-engine-status",
     "allow-set-draft",
+    "allow-install-update",
     "dialog:allow-open",
     "dialog:allow-ask",
     "notification:default",
