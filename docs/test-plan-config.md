@@ -1,6 +1,6 @@
 # The test plan as a JSON file with a schema
 
-Status: steps 1–4 built 2026-11-20; step 5 not built. Comes before [linked apps](linked-apps.md), which adds `backends` to it.
+Status: all five steps built 2026-11-20. Next: linked apps. Comes before [linked apps](linked-apps.md), which adds `backends` to it.
 
 ## Why
 
@@ -69,7 +69,11 @@ The schema rejects, among others: a command without `{port}`, a ready URL that i
 2. **Done 2026-11-20.** Tess drafts new plans as `.ultimate-tester.json`: the full schema is in her instructions, her answer is checked by the validator, and if it fails she gets one repair round with the exact problems. What she couldn't work out comes back as questions (field path + plain question), shown in setup with the right control for the field (choices, one per line, or text), her guess pre-filled. Each answer is checked against the schema before it's saved; Keep your guess leaves it. Answered questions never come back.
 3. **Done 2026-11-20.** Setup offers "Convert it" on an old `.md` plan. Tess turns it into JSON (same checks and repair round as drafting), keeping every fact, and the result is shown read-only as "Not saved yet". "Use the new plan" writes `.ultimate-tester.json`, queues her questions and deletes the `.md` (a change to commit in that repo); "Not now" drops it. Until then the `.md` keeps working.
 4. **Done 2026-11-20.** On a JSON plan, each plan-card row edits the fields it shows: notes and must-never-break one per line (a kept check keeps its who and where), the rest as that part's JSON. "Open as JSON" edits the whole file. Every save is checked against the schema; a refused edit says why in plain words (each format rule has its own reason, e.g. "needs {port} where the port goes") and the plan stays as it was. A plan changed meanwhile is not overwritten.
-5. Per-Mac file for sign-ins and backend paths (they live in `~/.ultimate-tester` already; this gives them a fixed shape).
+5. **Done 2026-11-20.** What stays on each Mac now has a fixed shape:
+   - `~/.ultimate-tester/apps.json` ([schema/apps.schema.json](../schema/apps.schema.json)): each repo's `id`, `name`, `root` (where it is on this Mac) and `remote`, its git address as host/owner/name with any login stripped. `findAppByRepo("github.com/acme/orders-api")` finds a plan's backend among this Mac's apps; entries added before this get their remote filled in on first lookup.
+   - `~/.ultimate-tester/settings.json`: model, time limit, notifications.
+   - Each repo's `.ultimate-tester/` folder (git-ignored): saved sign-ins per persona, test runs, setup questions, whether getting started was finished.
+   Nothing here is ever committed, and the shared plan never needs a path from it.
 
 Linked apps then only adds the engine side of `backends`.
 

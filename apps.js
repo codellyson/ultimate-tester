@@ -24,7 +24,7 @@ export function addApp(path) {
   const apps = listApps();
   let app = apps.find((a) => a.root === root);
   if (!app) {
-    app = { id: appId(root), name: basename(root), root };
+    app = { id: appId(root), name: basename(root), root, remote: remoteOf(root) };
     apps.push(app);
     mkdirSync(DIR, { recursive: true });
     writeFileSync(FILE, JSON.stringify(apps, null, 2));
@@ -33,6 +33,27 @@ export function addApp(path) {
 }
 
 export const findApp = (id) => listApps().find((a) => a.id === id) ?? null;
+
+// A git remote as host/owner/name, no scheme, login or .git: the form a plan's backends use.
+// "git@github.com:acme/api.git", "https://user:pw@gitlab.com/acme/api" -> "github.com/acme/api", "gitlab.com/acme/api".
+export function normalizeRemote(url) {
+  if (!url) return null;
+  const m = String(url).trim().match(/^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?([^/:]+)[:/](.+?)(?:\.git)?\/?$/i);
+  return m ? `${m[1].toLowerCase()}/${m[2]}` : null;
+}
+const remoteOf = (root) => { try { return normalizeRemote(execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()); } catch { return null; } };
+
+// The app on this Mac whose repo is `repo` (host/owner/name), for linking a frontend to its backends.
+// Entries added before remotes were recorded get theirs filled in the first time they're looked up.
+export function findAppByRepo(repo) {
+  const want = normalizeRemote(repo);
+  if (!want) return null;
+  const apps = listApps();
+  let changed = false;
+  for (const a of apps) if (!('remote' in a)) { a.remote = remoteOf(a.root); changed = true; }
+  if (changed) writeFileSync(FILE, JSON.stringify(apps, null, 2));
+  return apps.find((a) => a.remote?.toLowerCase() === want.toLowerCase()) ?? null;
+}
 
 // Takes an app off the list. Its repo, test plan and saved tests are left where they are.
 export function removeApp(id) {
