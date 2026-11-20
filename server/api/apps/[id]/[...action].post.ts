@@ -11,6 +11,8 @@ export default defineEventHandler(async (event) => {
       case 'convert': a.convertPlan().catch(() => {}); break // keeps going; the page polls setup
       case 'use-converted': a.useConverted(); break
       case 'drop-converted': a.dropConverted(); break
+      case 'plan-fields': a.setPlanFields((body as Record<string, unknown>).fields as Record<string, unknown>, body.base); break
+      case 'plan-json': a.replacePlan(body.text, body.base); break
       case 'signin/start': a.signInStart(body.persona).catch(() => {}); break // keeps going; the page polls setup
       case 'signin/finish': await a.signInFinish(); break
       case 'run': a.startRun(body.kind, body.target, body.note); break

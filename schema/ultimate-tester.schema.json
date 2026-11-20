@@ -4,110 +4,236 @@
   "title": "Ultimate Tester test plan",
   "description": "How Tess tests this app. Committed to the repo and shared with the team. Nothing here belongs to one Mac: no passwords, sessions, keys or folder paths. Fields marked x-ask are ones Tess can't work out from the repo; setup asks the person once and writes the answer here.",
   "type": "object",
-  "required": ["version", "browser", "start", "urls", "personas", "mustNeverBreak"],
+  "required": [
+    "version",
+    "browser",
+    "start",
+    "urls",
+    "personas",
+    "mustNeverBreak"
+  ],
   "additionalProperties": false,
   "properties": {
-    "$schema": { "type": "string" },
-    "version": { "const": 1 },
-
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
     "browser": {
       "type": "boolean",
       "description": "true: Tess uses the app in a browser (it can still send requests to its API). false: the app has no pages; Tess tests it with requests only and no browser opens."
     },
-
     "start": {
       "type": "object",
-      "required": ["command", "port", "readyUrl"],
+      "required": [
+        "command",
+        "port",
+        "readyUrl"
+      ],
       "additionalProperties": false,
       "properties": {
         "command": {
           "type": "string",
           "pattern": "\\{port\\}",
           "description": "Starts the app locally. Must contain {port}: Tess replaces it with a free port for each run, so her copy never collides with yours.",
-          "examples": ["pnpm dev --port {port}", "PORT={port} npm start"]
+          "examples": [
+            "pnpm dev --port {port}",
+            "PORT={port} npm start"
+          ],
+          "x-error": "needs {port} where the port goes, e.g. pnpm dev --port {port}"
         },
-        "port": { "type": "integer", "minimum": 1024, "maximum": 65535, "description": "The app's usual port, used when a person starts it by hand and in examples." },
-        "cwd": { "$ref": "#/$defs/repoPath", "description": "Folder to run the command in, relative to the repo root. Defaults to the root." },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "The app's usual port, used when a person starts it by hand and in examples."
+        },
+        "cwd": {
+          "$ref": "#/$defs/repoPath",
+          "description": "Folder to run the command in, relative to the repo root. Defaults to the root."
+        },
         "readyUrl": {
           "type": "string",
           "pattern": "^https?://(localhost|127\\.0\\.0\\.1):\\{port\\}(/\\S*)?$",
           "description": "Answers with a 2xx once the app is up. Always local and on {port}; a health route for an API.",
-          "examples": ["http://localhost:{port}", "http://localhost:{port}/health"]
+          "examples": [
+            "http://localhost:{port}",
+            "http://localhost:{port}/health"
+          ],
+          "x-error": "must be http://localhost:{port} plus an optional path"
         },
-        "readySeconds": { "type": "integer", "minimum": 5, "maximum": 600, "default": 60, "description": "How long the first start may take before Tess gives up." },
+        "readySeconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 600,
+          "default": 60,
+          "description": "How long the first start may take before Tess gives up."
+        },
         "env": {
           "type": "object",
           "description": "Extra settings for the start command. Never secrets: the engine refuses names ending in KEY, SECRET, TOKEN or PASSWORD. Secrets come from the app's own env file.",
-          "propertyNames": { "pattern": "^[A-Z][A-Z0-9_]*$", "not": { "pattern": "(KEY|SECRET|TOKEN|PASSWORD)$" } },
-          "additionalProperties": { "type": "string" }
+          "propertyNames": {
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "not": {
+              "pattern": "(KEY|SECRET|TOKEN|PASSWORD)$"
+            },
+            "x-error": "setting names are CAPITALS_WITH_UNDERSCORES and can't be secrets (\u2026KEY, \u2026SECRET, \u2026TOKEN, \u2026PASSWORD)"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "seed": {
           "description": "Resets local test data before a run, or null when there is nothing to reset. Always a command, never prose.",
           "oneOf": [
-            { "type": "null" },
+            {
+              "type": "null"
+            },
             {
               "type": "object",
-              "required": ["command"],
+              "required": [
+                "command"
+              ],
               "additionalProperties": false,
               "properties": {
-                "command": { "type": "string" },
-                "cwd": { "$ref": "#/$defs/repoPath" }
+                "command": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "$ref": "#/$defs/repoPath"
+                }
               }
             }
           ]
         }
       }
     },
-
     "urls": {
       "type": "object",
-      "required": ["allowed"],
+      "required": [
+        "allowed"
+      ],
       "additionalProperties": false,
       "properties": {
-        "allowed": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/hostPattern" }, "description": "Hosts Tess may open or call besides her own copy of the app (which is always allowed), e.g. a dev storefront." },
-        "never": { "type": "array", "items": { "$ref": "#/$defs/hostPattern" }, "description": "Hosts Tess must never open or call, e.g. production.", "x-ask": "Are there production addresses I must never open or call?" }
+        "allowed": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/hostPattern"
+          },
+          "description": "Hosts Tess may open or call besides her own copy of the app (which is always allowed), e.g. a dev storefront."
+        },
+        "never": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hostPattern"
+          },
+          "description": "Hosts Tess must never open or call, e.g. production.",
+          "x-ask": "Are there production addresses I must never open or call?"
+        }
       }
     },
-
     "neverRun": {
       "type": "array",
-      "items": { "type": "string", "minLength": 2 },
+      "items": {
+        "type": "string",
+        "minLength": 2
+      },
       "description": "Commands Tess must never run, matched by how they start (\"git push\" blocks \"git push origin main\").",
-      "examples": [["git push", "git merge", "pnpm cf:deploy", "wrangler deploy"]]
+      "examples": [
+        [
+          "git push",
+          "git merge",
+          "pnpm cf:deploy",
+          "wrangler deploy"
+        ]
+      ]
     },
-
     "personas": {
       "type": "array",
       "minItems": 1,
       "description": "Each kind of user (or, for an app with no browser, each kind of caller) whose access differs. Tess tests as each one.",
       "items": {
         "type": "object",
-        "required": ["key", "who", "signIn"],
+        "required": [
+          "key",
+          "who",
+          "signIn"
+        ],
         "additionalProperties": false,
         "properties": {
-          "key": { "$ref": "#/$defs/key" },
-          "who": { "type": "string", "minLength": 3, "description": "Plain words, as a person would say it." },
+          "key": {
+            "$ref": "#/$defs/key"
+          },
+          "who": {
+            "type": "string",
+            "minLength": 3,
+            "description": "Plain words, as a person would say it."
+          },
           "signIn": {
-            "enum": ["saved", "signUp", "none"],
+            "enum": [
+              "saved",
+              "signUp",
+              "none"
+            ],
             "description": "saved: a person signs in as them once per Mac and the session stays on that Mac. signUp: Tess creates a fresh account each run (see signUp). none: no sign-in.",
             "x-ask": "How should I get in as this person: an account you sign in to once on each Mac, a fresh account I create each run, or no sign-in?"
           },
           "signUp": {
             "type": "object",
-            "required": ["url", "email"],
+            "required": [
+              "url",
+              "email"
+            ],
             "additionalProperties": false,
             "properties": {
-              "url": { "type": "string", "pattern": "^/\\S*$", "description": "Sign-up page path on Tess's copy of the app.", "examples": ["/hub"] },
-              "email": { "type": "string", "pattern": "\\{time\\}.*@", "description": "Test email; {time} becomes the run time so each account is new.", "examples": ["ut-{time}@example.test"] }
+              "url": {
+                "type": "string",
+                "pattern": "^/\\S*$",
+                "description": "Sign-up page path on Tess's copy of the app.",
+                "examples": [
+                  "/hub"
+                ],
+                "x-error": "is a path starting with /, like /signup"
+              },
+              "email": {
+                "type": "string",
+                "pattern": "\\{time\\}.*@",
+                "description": "Test email; {time} becomes the run time so each account is new.",
+                "examples": [
+                  "ut-{time}@example.test"
+                ],
+                "x-error": "needs {time} and an @, like ut-{time}@example.test"
+              }
             }
           }
         },
         "allOf": [
-          { "if": { "properties": { "signIn": { "const": "signUp" } } }, "then": { "required": ["signUp"] }, "else": { "not": { "required": ["signUp"] } } }
+          {
+            "if": {
+              "properties": {
+                "signIn": {
+                  "const": "signUp"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "signUp"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "signUp"
+                ]
+              }
+            }
+          }
         ]
       }
     },
-
     "mustNeverBreak": {
       "type": "array",
       "minItems": 1,
@@ -116,96 +242,201 @@
       "x-ask": "What must never break, whatever changes?",
       "items": {
         "type": "object",
-        "required": ["check"],
+        "required": [
+          "check"
+        ],
         "additionalProperties": false,
         "properties": {
-          "check": { "type": "string", "minLength": 5, "description": "What should work, in plain words." },
-          "as": { "$ref": "#/$defs/key", "description": "Persona key to do it as. Leave out when anyone can." },
-          "startAt": { "type": "string", "pattern": "^/\\S*$", "description": "Path to start from, on Tess's copy of the app." }
+          "check": {
+            "type": "string",
+            "minLength": 5,
+            "description": "What should work, in plain words."
+          },
+          "as": {
+            "$ref": "#/$defs/key",
+            "description": "Persona key to do it as. Leave out when anyone can."
+          },
+          "startAt": {
+            "type": "string",
+            "pattern": "^/\\S*$",
+            "description": "Path to start from, on Tess's copy of the app.",
+            "x-error": "is a path starting with /"
+          }
         }
       }
     },
-
     "ownTests": {
       "type": "object",
-      "required": ["command"],
+      "required": [
+        "command"
+      ],
       "additionalProperties": false,
       "description": "The repo's own tests that Tess runs alongside her checks: only the test files a change adds or edits. Never whole suites; that is CI's job and would take too long.",
       "properties": {
-        "command": { "type": "string", "pattern": "\\{file\\}", "description": "Runs one test file; {file} becomes its path.", "examples": ["node --test {file}", "pnpm vitest run {file}"] },
-        "cwd": { "$ref": "#/$defs/repoPath" }
+        "command": {
+          "type": "string",
+          "pattern": "\\{file\\}",
+          "description": "Runs one test file; {file} becomes its path.",
+          "examples": [
+            "node --test {file}",
+            "pnpm vitest run {file}"
+          ],
+          "x-error": "needs {file} where the test file goes, e.g. node --test {file}"
+        },
+        "cwd": {
+          "$ref": "#/$defs/repoPath"
+        }
       }
     },
-
     "backends": {
       "type": "array",
       "description": "Other apps this one calls. When you test this app, Tess starts your local copy of each first, from its own plan, and points this app at it.",
       "items": {
         "type": "object",
-        "required": ["name", "repo", "env", "whenMissing"],
+        "required": [
+          "name",
+          "repo",
+          "env",
+          "whenMissing"
+        ],
         "additionalProperties": false,
         "properties": {
-          "name": { "$ref": "#/$defs/key", "description": "Short tag shown on checks, e.g. core-api." },
-          "repo": { "type": "string", "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}/[^\\s@:]+$", "description": "Git remote as host/owner/name, no scheme or credentials, so any Mac can find its checkout.", "examples": ["github.com/acme/orders-api"] },
-          "env": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "description": "The setting in this app that holds the backend's address. Tess sets it to her local copy's address." },
+          "name": {
+            "$ref": "#/$defs/key",
+            "description": "Short tag shown on checks, e.g. core-api."
+          },
+          "repo": {
+            "type": "string",
+            "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}/[^\\s@:]+$",
+            "description": "Git remote as host/owner/name, no scheme or credentials, so any Mac can find its checkout.",
+            "examples": [
+              "github.com/acme/orders-api"
+            ],
+            "x-error": "is host/owner/name, like github.com/acme/orders-api, with no https:// or login"
+          },
+          "env": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "The setting in this app that holds the backend's address. Tess sets it to her local copy's address.",
+            "x-error": "is a setting name in CAPITALS_WITH_UNDERSCORES"
+          },
           "whenMissing": {
-            "enum": ["dev", "stop"],
+            "enum": [
+              "dev",
+              "stop"
+            ],
             "description": "dev: use the address already in the env file and say so in the result. stop: don't test without the local copy.",
             "x-ask": "If this backend isn't on a Mac, should I use the dev one or stop?"
           }
         }
       }
     },
-
-    "notes": { "type": "array", "items": { "type": "string" }, "description": "What Tess should always keep in mind: things to focus on, skip, or that look broken but aren't. Written by people." },
-
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "What Tess should always keep in mind: things to focus on, skip, or that look broken but aren't. Written by people."
+    },
     "lessons": {
       "type": "array",
       "description": "Corrections people gave on past results. Tess adds these; people can remove them.",
       "items": {
         "type": "object",
-        "required": ["text", "at"],
+        "required": [
+          "text",
+          "at"
+        ],
         "additionalProperties": false,
         "properties": {
-          "text": { "type": "string" },
-          "check": { "type": "string" },
-          "at": { "type": "string", "format": "date-time" }
+          "text": {
+            "type": "string"
+          },
+          "check": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       }
     },
-
     "environment": {
       "type": "array",
       "description": "Test data Tess made before and exactly how, so she can recreate it after the local data is reset. Tess adds these.",
       "items": {
         "type": "object",
-        "required": ["what", "steps"],
+        "required": [
+          "what",
+          "steps"
+        ],
         "additionalProperties": false,
         "properties": {
-          "what": { "type": "string" },
-          "as": { "$ref": "#/$defs/key" },
-          "steps": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+          "what": {
+            "type": "string"
+          },
+          "as": {
+            "$ref": "#/$defs/key"
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          }
         }
       }
     }
   },
-
   "allOf": [
     {
       "description": "An app with no browser has callers, not people who sign in: keys come from its env file.",
-      "if": { "properties": { "browser": { "const": false } } },
-      "then": { "properties": { "personas": { "items": { "properties": { "signIn": { "const": "none" } } } } } }
+      "if": {
+        "properties": {
+          "browser": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "personas": {
+            "items": {
+              "properties": {
+                "signIn": {
+                  "const": "none"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ],
-
   "$defs": {
-    "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-    "repoPath": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)\\S+$", "description": "Relative to the repo root; no leading slash, no .." },
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "x-error": "is lowercase letters, numbers and dashes, like b2b-owner"
+    },
+    "repoPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\.\\.)\\S+$",
+      "description": "Relative to the repo root; no leading slash, no ..",
+      "x-error": "is a folder inside the repo, like apps/web"
+    },
     "hostPattern": {
       "type": "string",
       "pattern": "^(https?://)?(\\*\\.)?[a-z0-9.-]+(:\\d+)?$",
       "description": "A host, optionally with a leading *. for any subdomain and an optional scheme or port. No paths.",
-      "examples": ["*.dev.example.com", "api.dev.example.com", "*.example.com"]
+      "examples": [
+        "*.dev.example.com",
+        "api.dev.example.com",
+        "*.example.com"
+      ],
+      "x-error": "is a host like *.example.com or api.example.com, with no path"
     }
   }
 }

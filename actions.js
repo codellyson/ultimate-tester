@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseStart, withPort, parsePersonas, shouldSkip } from './lib.js';
 import { signInWindow, freePort } from './live.js';
-import { readPlan, addLesson as planLesson, setNotes as planNotes, PLAN_FILES, planSchema, validate, savePlanJson, answerPlan, getAt, schemaAt, planToMarkdown, PLAN_MD } from './plan.js';
+import { readPlan, addLesson as planLesson, setNotes as planNotes, PLAN_FILES, planSchema, validate, savePlanJson, answerPlan, getAt, schemaAt, planToMarkdown, PLAN_MD, setPlanFields, replacePlan } from './plan.js';
 
 // UT_HOME is set by `ultimate-tester serve`; once Nitro bundles this file, import.meta.url no longer points at the repo.
 const HOME = process.env.UT_HOME ?? dirname(fileURLToPath(import.meta.url));
@@ -130,6 +130,8 @@ export function createActions(root) {
         profileReady,
         // Which file holds the plan, and what's wrong with it if it fails its schema (then nothing is tested).
         planFormat: plan.format,
+        // The JSON plan itself, so the plan card can edit its fields.
+        planJson: plan.format === 'json' ? plan.json : null,
         // A converted JSON plan waiting to be checked and used (the old .md still runs until then).
         proposal: plan.format === 'md' && proposal() ? { text: planToMarkdown(proposal().plan), questions: (proposal().unsure ?? []).length } : null,
         planErrors: plan.errors,
@@ -254,6 +256,17 @@ In "unsure", list each answer you could not work out from the repo (the schema m
       try { unlinkSync(proposalFile); } catch {}
     },
     dropConverted() { try { unlinkSync(proposalFile); } catch {} },
+    // Plan card edits on a JSON plan. base: the profileHash the card was showing; a plan changed since
+    // (something Tess learned, the other window) is not overwritten.
+    setPlanFields(fields, base) {
+      if (base && base !== createHash('sha1').update(readPlan(root).text).digest('hex')) throw new Error('The plan changed while you were editing. Showing the latest; make your edit again.');
+      setPlanFields(root, fields);
+    },
+    replacePlan(text, base) {
+      if (typeof text !== 'string' || text.length > 200_000) throw new Error('The plan is empty or too long');
+      if (base && base !== createHash('sha1').update(readPlan(root).text).digest('hex')) throw new Error('The plan changed while you were editing. Showing the latest; make your edit again.');
+      replacePlan(root, text);
+    },
   });
   const rest = {
 

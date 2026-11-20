@@ -1,6 +1,6 @@
 # The test plan as a JSON file with a schema
 
-Status: steps 1–3 built 2026-11-20; steps 4–5 not built. Comes before [linked apps](linked-apps.md), which adds `backends` to it.
+Status: steps 1–4 built 2026-11-20; step 5 not built. Comes before [linked apps](linked-apps.md), which adds `backends` to it.
 
 ## Why
 
@@ -68,7 +68,7 @@ The schema rejects, among others: a command without `{port}`, a ready URL that i
 1. **Done 2026-11-20.** `plan.js` reads `.ultimate-tester.json` (or the old `.md`), checks it against the schema with a small built-in validator (the engine ships without node_modules), and hands the engine the same text it always read. Lessons, notes and test-data recipes are written back into the JSON and re-checked before saving. An invalid plan is never half-read: nothing is tested and setup lists the problems. The plan card shows a JSON plan read-only until step 4. Not done yet: publishing the schema at its URL.
 2. **Done 2026-11-20.** Tess drafts new plans as `.ultimate-tester.json`: the full schema is in her instructions, her answer is checked by the validator, and if it fails she gets one repair round with the exact problems. What she couldn't work out comes back as questions (field path + plain question), shown in setup with the right control for the field (choices, one per line, or text), her guess pre-filled. Each answer is checked against the schema before it's saved; Keep your guess leaves it. Answered questions never come back.
 3. **Done 2026-11-20.** Setup offers "Convert it" on an old `.md` plan. Tess turns it into JSON (same checks and repair round as drafting), keeping every fact, and the result is shown read-only as "Not saved yet". "Use the new plan" writes `.ultimate-tester.json`, queues her questions and deletes the `.md` (a change to commit in that repo); "Not now" drops it. Until then the `.md` keeps working.
-4. Plan card reads and writes the JSON fields.
+4. **Done 2026-11-20.** On a JSON plan, each plan-card row edits the fields it shows: notes and must-never-break one per line (a kept check keeps its who and where), the rest as that part's JSON. "Open as JSON" edits the whole file. Every save is checked against the schema; a refused edit says why in plain words (each format rule has its own reason, e.g. "needs {port} where the port goes") and the plan stays as it was. A plan changed meanwhile is not overwritten.
 5. Per-Mac file for sign-ins and backend paths (they live in `~/.ultimate-tester` already; this gives them a fixed shape).
 
 Linked apps then only adds the engine side of `backends`.

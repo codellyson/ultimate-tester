@@ -15,7 +15,7 @@ export type General = { model: 'opus' | 'sonnet', timeoutMin: number, notificati
 export type Persona = { key: string, label: string, signIn: boolean, savedAt: string | null }
 export type PlanQuestion = { field: string, question: string, value: unknown, kind: 'choice' | 'lines' | 'text', options?: { value: unknown, label: string }[], objects?: boolean }
 export type Setup = {
-  profile: string, profileHash: string, profileReady: boolean, planFormat?: "json" | "md" | null, planErrors?: string[], questions?: PlanQuestion[], onboarded: boolean, changed?: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
+  profile: string, profileHash: string, profileReady: boolean, planFormat?: "json" | "md" | null, planJson?: Record<string, unknown> | null, planErrors?: string[], questions?: PlanQuestion[], onboarded: boolean, changed?: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
   personas: Persona[], allSignedIn: boolean, signingIn: string | null, running: boolean, start?: { command: string | null, url: string | null },
   job: { kind: string | null, status: string, message: string, steps: string[] }
 }

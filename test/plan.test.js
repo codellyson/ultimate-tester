@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { validate, planToMarkdown, readPlan, addLesson, addEnvironment, answerPlan, schemaAt, getAt, PLAN_JSON } from '../plan.js';
+import { validate, planToMarkdown, readPlan, addLesson, addEnvironment, answerPlan, schemaAt, getAt, setPlanFields, replacePlan, PLAN_JSON } from '../plan.js';
 import { parseStart, parsePersonas, withPort } from '../lib.js';
 
 const ex = (name) => JSON.parse(readFileSync(new URL(`../schema/examples/${name}.json`, import.meta.url), 'utf8'));
@@ -82,4 +82,18 @@ test('an answer goes into the plan only if the plan stays valid', () => {
   assert.throws(() => answerPlan(dir, 'personas[0].signIn', 'maybe'), /Not saved/);
   assert.throws(() => answerPlan(dir, 'urls.never', ['example.com/admin']), /Not saved/);
   assert.equal(JSON.parse(readFileSync(join(dir, PLAN_JSON), 'utf8')).personas[0].signIn, 'saved', 'a refused answer changes nothing');
+});
+
+test('plan card edits are saved only when the plan stays valid', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ut-plan-'));
+  writeFileSync(join(dir, PLAN_JSON), JSON.stringify(P));
+  setPlanFields(dir, { notes: ['Skip the billing page'], 'start.port': 3005 });
+  let saved = JSON.parse(readFileSync(join(dir, PLAN_JSON), 'utf8'));
+  assert.deepEqual(saved.notes, ['Skip the billing page']);
+  assert.equal(saved.start.port, 3005);
+  assert.throws(() => setPlanFields(dir, { start: { command: 'pnpm dev', port: 3005, readyUrl: 'http://localhost:{port}' } }), /Not saved/);
+  assert.throws(() => replacePlan(dir, '{ not json'), /isn't valid JSON/);
+  assert.throws(() => replacePlan(dir, JSON.stringify({ version: 1 })), /Not saved/);
+  saved = JSON.parse(readFileSync(join(dir, PLAN_JSON), 'utf8'));
+  assert.equal(saved.start.command, P.start.command, 'refused edits change nothing');
 });

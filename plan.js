@@ -28,7 +28,7 @@ export function validate(value, s = planSchema(), root = s, at = '') {
   if ('const' in s && JSON.stringify(value) !== JSON.stringify(s.const)) err(`should be ${JSON.stringify(s.const)}`);
   if (s.enum && !s.enum.some((e) => JSON.stringify(e) === JSON.stringify(value))) err(`should be one of ${s.enum.join(', ')}`);
   if (typeof value === 'string') {
-    if (s.pattern && !new RegExp(s.pattern, 'u').test(value)) err(`"${value}" isn't in the expected form`);
+    if (s.pattern && !new RegExp(s.pattern, 'u').test(value)) err(s['x-error'] ? `"${value}" ${s['x-error']}` : `"${value}" isn't in the expected form`);
     if (s.minLength != null && value.length < s.minLength) err('is too short');
   }
   if (typeof value === 'number') {
@@ -50,7 +50,7 @@ export function validate(value, s = planSchema(), root = s, at = '') {
       else if (typeof s.additionalProperties === 'object') errs.push(...validate(v, s.additionalProperties, root, where));
     }
   }
-  if (s.not && !validate(value, s.not, root, at).length) err("isn't allowed");
+  if (s.not && !validate(value, s.not, root, at).length) err(s['x-error'] ? `"${value}" ${s['x-error']}` : "isn't allowed");
   if (s.oneOf && s.oneOf.filter((o) => !validate(value, o, root, at).length).length !== 1) err("doesn't match any allowed shape");
   for (const sub of s.allOf ?? []) errs.push(...validate(value, sub, root, at));
   if (s.if) {
@@ -173,3 +173,18 @@ export function answerPlan(root, field, value) {
   return next;
 }
 export const savePlanJson = writeJson;
+
+// Edits from the plan card: several fields at once, or the whole file. Checked against the schema before
+// anything is written, so a bad edit is refused with the reason and the plan stays as it was.
+export function setPlanFields(root, fields) {
+  const p = readPlan(root);
+  if (p.format !== 'json') throw new Error('Only a JSON plan is edited by field');
+  let next = p.json;
+  for (const [field, value] of Object.entries(fields ?? {})) next = value === undefined ? next : setAt(next, field, value);
+  writeJson(root, next);
+}
+export function replacePlan(root, text) {
+  let json;
+  try { json = JSON.parse(text); } catch (e) { throw new Error(`Not saved, that isn't valid JSON: ${e.message}`); }
+  writeJson(root, json);
+}
