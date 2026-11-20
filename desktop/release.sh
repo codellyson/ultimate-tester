@@ -17,7 +17,7 @@ TAURI_SIGNING_PRIVATE_KEY=$(cat "$KEY") TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" ca
 OUT=$(mktemp -d)
 B=target/release/bundle
 cp "$B/macos/Ultimate Tester.app.tar.gz" "$OUT/UltimateTester.app.tar.gz"
-cp "$B"/dmg/*.dmg "$OUT/UltimateTester.dmg"
+cp "$B"/dmg/*_"$VERSION"_*.dmg "$OUT/UltimateTester.dmg"
 NOTES="$NOTES" SIG=$(cat "$B/macos/Ultimate Tester.app.tar.gz.sig") VERSION="$VERSION" \
   URL="https://github.com/$REPO/releases/download/$TAG/UltimateTester.app.tar.gz" \
   node -e 'const e = process.env; console.log(JSON.stringify({ version: e.VERSION, notes: e.NOTES, pub_date: new Date().toISOString(), platforms: { "darwin-aarch64": { signature: e.SIG, url: e.URL } } }, null, 2))' > "$OUT/latest.json"
