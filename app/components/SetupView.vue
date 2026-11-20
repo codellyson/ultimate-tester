@@ -8,6 +8,7 @@ const drafting = computed(() => s.value.job.kind === 'draft' && s.value.job.stat
 const converting = computed(() => s.value.job.kind === 'convert' && s.value.job.status === 'working')
 const needs = computed(() => s.value.personas.filter((p) => p.signIn && !p.savedAt))
 const signIns = computed(() => s.value.personas.filter((p) => p.signIn))
+const backends = computed(() => s.value.backends ?? [])
 
 // Each trigger on or off by itself, from what is really installed; the box shows the change while it installs.
 const saving = ref<'stop' | 'commit' | null>(null)
@@ -26,6 +27,10 @@ const steps = computed(() => [
   { key: 'plan', title: 'Test plan', done: s.value.profileReady && !state.confirmJustDrafted,
     line: state.confirmJustDrafted ? 'I drafted this from your repo. Check it before I test.' : [`${s.value.personas.length} ${s.value.personas.length === 1 ? 'person' : 'people'} to test as`, mustCount.value ? `${mustCount.value} things that must never break` : ''].filter(Boolean).join(' · '),
     action: 'Review' },
+  // Backends the plan links to: here and usable, here but its plan isn't, or not on this Mac (then the dev one, or stop).
+  ...(backends.value.length ? [{ key: 'backends', title: 'Backends', done: backends.value.every((b) => b.found?.planOk || b.whenMissing === 'dev'),
+    line: `${backends.value.filter((b) => b.found?.planOk).length} of ${backends.value.length} on this Mac. I start your copies so I test your code, not what's deployed.`,
+    action: 'View' }] : []),
   { key: 'people', title: 'Sign in', done: !needs.value.length,
     line: !signIns.value.length ? 'Nobody needs signing in.' : needs.value.length ? `Signed in as ${signIns.value.length - needs.value.length} of ${signIns.value.length}. Sign in once per person, with a test account.` : `Signed in as all ${signIns.value.length}.`,
     action: needs.value.length ? 'Sign in' : 'View' },
@@ -80,6 +85,20 @@ const left = computed(() => steps.value.filter((x) => !x.done).length)
                 <ProfileCard :profile="s.profile" />
                 <button v-if="state.confirmJustDrafted" class="btn-blue self-start" @click="state.confirmJustDrafted = false; open = steps.find((x) => !x.done)?.key ?? ''">Looks right</button>
               </template>
+              <ul v-else-if="st.key === 'backends'" class="rounded-2xl bg-[var(--surface)] surface divide-y divide-[var(--line)]">
+                <li v-for="b in backends" :key="b.name" class="px-4 py-3 flex items-start gap-3">
+                  <component :is="b.found?.planOk ? PhCheckCircle : PhCircle" :class="['size-[17px] shrink-0 mt-0.5', b.found?.planOk ? 'text-[var(--ok)]' : 'text-[var(--line-strong)]']" aria-hidden="true" />
+                  <div class="flex-1 min-w-0 text-[13px] leading-[1.55]">
+                    <p><b class="font-medium">{{ b.name }}</b> <span class="text-[var(--muted)]">sets {{ b.env }}</span></p>
+                    <p v-if="b.found && b.found.planOk" class="text-[var(--muted)] selectable">{{ b.found.where }} · {{ b.found.branch ?? 'no branch' }}{{ b.found.dirty ? ' (uncommitted changes)' : '' }}</p>
+                    <p v-else-if="b.found" class="text-[var(--muted)]">{{ b.found.where }} is on this Mac, but its own test plan is missing or has problems. Open it in Ultimate Tester and set it up; until then {{ b.whenMissing === 'dev' ? 'I use the dev one' : "I won't test" }}.</p>
+                    <template v-else>
+                      <p class="text-[var(--muted)]">Not on this Mac. Clone it and add it to Ultimate Tester; until then {{ b.whenMissing === 'dev' ? 'I use the dev one from the env file' : "I won't test this app" }}.</p>
+                      <p class="mt-1 selectable"><code class="rounded-md bg-[var(--code)] px-1.5 py-0.5 text-[12px]">git clone https://{{ b.repo }}.git</code></p>
+                    </template>
+                  </div>
+                </li>
+              </ul>
               <PersonaList v-else-if="st.key === 'people'" />
               <TriggerToggles v-else :stop="want.stop" :commit="want.commit" :disabled="!!saving" @toggle="toggle" />
             </div>

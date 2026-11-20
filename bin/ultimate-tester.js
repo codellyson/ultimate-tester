@@ -8,6 +8,7 @@ import { shouldSkip, VERDICT_SCHEMA, enforceEvidence, renderReport, usageLabel, 
 const PORT = Number(process.env.ULTIMATE_TESTER_PORT ?? 4600);
 import { startBrowser, freePort, useSession } from '../live.js';
 import { readPlan, addEnvironment, PLAN_FILES } from '../plan.js';
+import { startBackends } from '../linked.js';
 import { sessionFile } from '../actions.js';
 import { addApp, readSettings } from '../apps.js';
 
@@ -245,7 +246,17 @@ async function run({ commit = null, range = null, dedupe = false, note = '' } = 
   writeFileSync(join(runDir, 'pid'), String(process.pid));
   writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: change.mode, message: change.message, files: change.files, note, kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit ?? null }));
   const port = await freePort();
+  // Linked backends first: your local copies, started from their own plans, so the frontend calls your code.
+  const linked = await startBackends(root(), runDir);
+  writeFileSync(join(runDir, 'apps.json'), JSON.stringify(linked.apps, null, 2));
+  if (linked.blocked) {
+    const verdict = { status: 'unverified', summary: `I didn't test this: ${linked.blocked}`, flows: [] };
+    writeFileSync(join(runDir, 'verdict.json'), JSON.stringify(verdict, null, 2));
+    return { status: 'unverified', report: `Ultimate Tester: ${verdict.summary}` };
+  }
   const prompt = readFileSync(join(HOME, 'prompt.md'), 'utf8')
+    .replace('{{BACKENDS}}', () => (linked.linked ? linked.lines.join('\n') : 'None. This app is tested on its own.'))
+    .replace('{{BACKEND_DIFFS}}', () => linked.diffs.join('\n\n') || 'None.')
     .replace('{{PROFILE}}', () => withPort(readPlan(root()).text, port))
     .replace('{{PERSONAS}}', () => personaLines())
     .replaceAll('{{AS}}', `node ${JSON.stringify(SELF)} as`)
@@ -260,7 +271,8 @@ async function run({ commit = null, range = null, dedupe = false, note = '' } = 
 
   if (!HEADLESS) await openWindow();
   const started = Date.now();
-  const { verdict: raw, costUsd } = await runTester(prompt, runDir);
+  let raw, costUsd;
+  try { ({ verdict: raw, costUsd } = await runTester(prompt, runDir)); } finally { linked.stop(); }
   // Hold the verdict to Tess's own plan: anything planned but not reported counts as not checked.
   let plan = [];
   try { plan = JSON.parse(readFileSync(join(runDir, 'plan.json'), 'utf8')); } catch {}

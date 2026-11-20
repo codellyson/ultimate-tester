@@ -6,6 +6,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseStart, withPort, parsePersonas, shouldSkip } from './lib.js';
 import { signInWindow, freePort } from './live.js';
+import { findAppByRepo } from './apps.js';
+import { checkoutOf } from './linked.js';
 import { readPlan, addLesson as planLesson, setNotes as planNotes, PLAN_FILES, planSchema, validate, savePlanJson, answerPlan, getAt, schemaAt, planToMarkdown, PLAN_MD, setPlanFields, replacePlan } from './plan.js';
 
 // UT_HOME is set by `ultimate-tester serve`; once Nitro bundles this file, import.meta.url no longer points at the repo.
@@ -132,6 +134,12 @@ export function createActions(root) {
         planFormat: plan.format,
         // The JSON plan itself, so the plan card can edit its fields.
         planJson: plan.format === 'json' ? plan.json : null,
+        // Each backend the plan links to, and whether this Mac has it (with its branch and whether its plan is usable).
+        backends: plan.format === 'json' ? (plan.json.backends ?? []).map((b) => {
+          const app = findAppByRepo(b.repo);
+          const bp = app ? readPlan(app.root) : null;
+          return { ...b, found: app ? { name: app.name, where: app.root.replace(/^\/Users\/[^/]+/, '~'), ...checkoutOf(app.root), planOk: !!bp?.format && !bp.errors.length } : null };
+        }) : [],
         // A converted JSON plan waiting to be checked and used (the old .md still runs until then).
         proposal: plan.format === 'md' && proposal() ? { text: planToMarkdown(proposal().plan), questions: (proposal().unsure ?? []).length } : null,
         planErrors: plan.errors,

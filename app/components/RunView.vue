@@ -136,6 +136,14 @@ const title = computed(() => {
   if (!c || c.kind === 'changes' || first.startsWith('(not committed')) return isSetup.value ? 'Making test data' : "Changes you haven't committed"
   return first.replace(/^[0-9a-f]{7,40} /, '')
 })
+// With linked backends: each check's app as a tag, and the apps with their branches under the title.
+const linkedApps = computed(() => ((r.value.apps?.length ?? 0) > 1 ? r.value.apps! : null))
+const appTag = (p: PlanItem) => {
+  if (!linkedApps.value) return undefined
+  const app = p.app ?? flows.value.find((f) => f.name === p.name)?.app ?? 'app'
+  return app === 'app' ? linkedApps.value[0]!.name : app
+}
+const appLine = (a: NonNullable<typeof linkedApps.value>[number]) => a.source === 'dev' ? 'dev backend' : a.source === 'missing' ? 'not available' : [a.branch, a.commit && `@ ${a.commit}`, a.dirty && '(uncommitted)'].filter(Boolean).join(' ')
 const metaLine = computed(() => {
   const c = r.value.change
   const hash = c?.message.match(/^([0-9a-f]{7,40}) /)?.[1]?.slice(0, 7)
@@ -164,20 +172,12 @@ const selFlow = computed(() => flows.value.find((f) => f.name === state.sel.chec
 const selItem = computed(() => plan.value.find((p) => p.name === state.sel.check))
 // What Tess saw, in her words: her note on the check, else what she reported seeing.
 const saw = computed(() => selItem.value?.note || selFlow.value?.actual || '')
-// Evidence that isn't a screenshot: requests and what came back ("POST /notes {...} → 201 {...}"), or a log line.
-const pretty = (s: string) => { try { return JSON.stringify(JSON.parse(s), null, 2) } catch { return s } }
-const textEvidence = computed(() => (finished.value ? (selFlow.value?.evidence ?? []).filter((e) => !/\.(png|jpe?g|webp|gif)$/i.test(e.trim())).flatMap((e) => e.split(/;\s+(?=(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s)/)).map((e) => {
-  const [ask = '', ...rest] = e.split(' → ')
-  const got = rest.join(' → ')
-  const req = ask.match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\S+)\s*(.*)$/i)
-  if (!req || !rest.length) return { raw: e }
-  const res = got.match(/^(\d{3})\b[;:]?\s*(.*)$/s)
-  return { method: req[1]!.toUpperCase(), path: req[2]!, sent: pretty(req[3]!.trim()), code: res?.[1] ?? '', body: pretty((res ? res[2]! : got).trim()) }
-}) : []))
-// Requests behind the selected check: Tess's own list when she gave one, else read from her evidence lines (older runs).
-const reqs = computed<Req[]>(() => selFlow.value?.requests?.length ? selFlow.value.requests
-  : textEvidence.value.filter((e) => 'method' in e).map((e) => ({ method: e.method!, path: e.path!, sent: e.sent || undefined, status: Number(e.code) || 0, got: e.body || undefined })))
-const rawEvidence = computed(() => textEvidence.value.filter((e) => !('method' in e)))
+// Evidence that isn't a screenshot.
+const textEvidence = computed(() => (finished.value ? (selFlow.value?.evidence ?? []).filter((e) => !/\.(png|jpe?g|webp|gif)$/i.test(e.trim())).map((raw) => ({ raw })) : []))
+// Requests behind the selected check, as Tess recorded them.
+const reqs = computed<Req[]>(() => (finished.value ? selFlow.value?.requests ?? [] : []))
+// Evidence lines that aren't screenshots (command output, log lines), shown as they are.
+const rawEvidence = computed(() => (reqs.value.length ? [] : textEvidence.value))
 const reqProof = computed(() => reqs.value.some((r) => r.expected))
 const apiBase = computed(() => state.setup?.start?.url?.match(/^https?:\/\/[^/]+/)?.[0] ?? null)
 // The selected check's result in words, and for one that didn't run, who I'd need to sign in as.
@@ -334,6 +334,9 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           <span class="selectable truncate" :title="v?.usage">{{ metaLine }}</span>
         </div>
         <h1 class="selectable mt-3 font-[family-name:var(--font-serif)] text-[28px] leading-[1.15] font-semibold tracking-[-0.015em] text-balance">{{ title }}</h1>
+        <p v-if="linkedApps" class="selectable mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-[var(--muted)]">
+          <span v-for="a in linkedApps" :key="a.name" :title="a.why ?? undefined"><b class="font-medium text-[var(--ink)]">{{ a.name }}</b> · {{ appLine(a) }}</span>
+        </p>
         <!-- Tess, in her own words: the summary when she's done, her latest line while she works. -->
         <!-- Two lines of Tess by default, so the header stays calm; More shows the rest. -->
         <div class="mt-5 max-w-[46em] flex gap-3" aria-live="polite">
@@ -373,7 +376,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           <p v-if="!plan.length" class="pt-4 text-[var(--muted)]">{{ live ? (isSetup ? 'Working out what test data to make…' : 'Deciding what to check…') : 'This test has no checks.' }}</p>
           <div v-for="g in groups" :key="g.gk">
             <h3 v-if="g.title" class="mt-5 mb-1 px-2.5 text-[12px] text-[var(--faint)]">{{ g.title }}</h3>
-            <TransitionGroup name="list" tag="ul" class="flex flex-col gap-2"><CheckRow v-for="p in [...g.problems, ...g.passed]" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" @pick="pick" /></TransitionGroup>
+            <TransitionGroup name="list" tag="ul" class="flex flex-col gap-2"><CheckRow v-for="p in [...g.problems, ...g.passed]" :key="p.name" :item="p" :finished="finished" :shots="shotsFor(p.name).length" :details="flows.find((f) => f.name === p.name)" :tag="appTag(p)" @pick="pick" /></TransitionGroup>
             <template v-for="f in g.fixes" :key="f.who?.key ?? '-'">
               <!-- A missing sign-in is fixed in Settings. -->
               <button v-if="f.who && !startFail" class="mt-2 w-full flex items-center gap-2 text-start rounded-[10px] surface px-3 py-2.5 text-[13px] font-medium hover:bg-[var(--row-hover)]" @click="openSettings()">

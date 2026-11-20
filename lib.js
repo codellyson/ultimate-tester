@@ -29,6 +29,8 @@ export const VERDICT_SCHEMA = {
           evidence: { type: 'array', items: { type: 'string' } },
           // The page Tess was on when she took this check's screenshot, shown above it in the app.
           url: { type: 'string' },
+          // With linked backends: which app a check exercised ("app", or a backend's name).
+          app: { type: 'string' },
           // Set only on an unverified check that couldn't run because something it needs doesn't exist yet.
           needs: { type: 'string' },
           setupBy: { enum: ['tess', 'person'] },

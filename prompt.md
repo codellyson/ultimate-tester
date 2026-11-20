@@ -44,6 +44,16 @@ Return the verdict as the structured output.
 
 {{HISTORY}}
 
+## Backends this app calls
+
+{{BACKENDS}}
+
+When backends are listed as your local copies: start this app with the settings given above, plan checks for this app and for those backends, and give every plan.json item and every verdict flow an `app` field: "app" for this app, or the backend's name for a check made directly against a backend. A page check that shows a backend's data is "app". Put the backends' branches in the summary only when one differs or is the dev one.
+
+## Changes in backends
+
+{{BACKEND_DIFFS}}
+
 ## Change under test ({{MODE}})
 
 {{MESSAGE}}

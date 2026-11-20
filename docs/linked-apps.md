@@ -1,6 +1,6 @@
 # Linked apps: testing a frontend with the backends it calls
 
-Status: design agreed 2026-11-20, not built.
+Status: steps 1–3 built 2026-11-20 (link, start backends, test across apps). Steps 4–5 not built.
 
 ## The problem
 

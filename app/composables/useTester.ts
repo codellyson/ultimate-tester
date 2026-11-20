@@ -3,11 +3,12 @@ import type { Target } from '~/utils/format'
 
 export type App = { id: string, name: string, root: string, profileReady: boolean, signedIn: boolean, onboarded: boolean, running: boolean, last: RunInfo | null }
 export type RunInfo = { id: string, status: string, summary: string, title: string, kind?: string | null, target?: string | null, note?: string, counts?: { pass: number, fail: number, unk: number }, shotCount?: number }
-export type PlanItem = { name: string, why?: string, source?: string, status: string, note?: string, persona?: string }
-export type Flow = { name: string, status: string, steps?: string[], expected?: string, actual?: string, evidence?: string[], url?: string, persona?: string, needs?: string, setupBy?: 'tess' | 'person', requests?: Req[] }
+export type PlanItem = { name: string, why?: string, source?: string, status: string, note?: string, persona?: string, app?: string }
+export type Flow = { name: string, app?: string, status: string, steps?: string[], expected?: string, actual?: string, evidence?: string[], url?: string, persona?: string, needs?: string, setupBy?: 'tess' | 'person', requests?: Req[] }
 export type Req = { method: string, path: string, sent?: string, status: number, ms?: number, got?: string, expected?: string }
 export type Verdict = { status: string, summary: string, flows: Flow[], durationMs?: number, usage?: string }
 export type RunDetail = RunInfo & {
+  apps?: { name: string, role: 'app' | 'backend', source?: 'local' | 'dev' | 'missing', branch?: string | null, commit?: string | null, dirty?: boolean, why?: string | null }[] | null
   plan: PlanItem[] | null, planUnreadable: boolean, intro: string, change: { message: string, files: string[], mode: string, note?: string, kind?: string, target?: string | null, source?: { id: string, kind: string, target: string | null, note: string, checks: string[] } } | null,
   live: { url: string } | null, typicalMs: number | null, steps: string[], verdict: Verdict | null, shots: string[]
 }
@@ -15,7 +16,7 @@ export type General = { model: 'opus' | 'sonnet', timeoutMin: number, notificati
 export type Persona = { key: string, label: string, signIn: boolean, savedAt: string | null }
 export type PlanQuestion = { field: string, question: string, value: unknown, kind: 'choice' | 'lines' | 'text', options?: { value: unknown, label: string }[], objects?: boolean }
 export type Setup = {
-  profile: string, profileHash: string, profileReady: boolean, planFormat?: "json" | "md" | null, planJson?: Record<string, unknown> | null, planErrors?: string[], questions?: PlanQuestion[], onboarded: boolean, changed?: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
+  profile: string, profileHash: string, profileReady: boolean, planFormat?: "json" | "md" | null, planJson?: Record<string, unknown> | null, backends?: { name: string, repo: string, env: string, whenMissing: 'dev' | 'stop', found: { name: string, where: string, branch: string | null, commit: string | null, dirty: boolean, planOk: boolean } | null }[], planErrors?: string[], questions?: PlanQuestion[], onboarded: boolean, changed?: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
   personas: Persona[], allSignedIn: boolean, signingIn: string | null, running: boolean, start?: { command: string | null, url: string | null },
   job: { kind: string | null, status: string, message: string, steps: string[] }
 }

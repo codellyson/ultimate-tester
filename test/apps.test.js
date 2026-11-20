@@ -1,14 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // A throwaway home, so the real ~/.ultimate-tester is never touched.
 const home = mkdtempSync(join(tmpdir(), 'ut-home-'));
 process.env.ULTIMATE_TESTER_HOME = home;
-const { addApp, findAppByRepo, normalizeRemote, appId } = await import('../apps.js');
+const { addApp, findAppByRepo, normalizeRemote } = await import('../apps.js');
 const { validate } = await import('../plan.js');
 const appsSchema = JSON.parse(readFileSync(new URL('../schema/apps.schema.json', import.meta.url), 'utf8'));
 
@@ -37,15 +37,4 @@ test("a plan's backend is found among this Mac's apps by its git address", () =>
   const saved = JSON.parse(readFileSync(join(home, 'apps.json'), 'utf8'));
   assert.deepEqual(validate(saved, appsSchema), []);
   assert.ok(!JSON.stringify(saved).includes('token'), 'logins in a remote are never stored');
-});
-
-test('apps added before remotes were recorded get theirs on first lookup', () => {
-  const old = repo('legacy-api', 'git@gitlab.com:acme/legacy-api.git');
-  const list = JSON.parse(readFileSync(join(home, 'apps.json'), 'utf8'));
-  list.push({ id: appId(old), name: 'legacy-api', root: old });
-  writeFileSync(join(home, 'apps.json'), JSON.stringify(list));
-  assert.equal(findAppByRepo('gitlab.com/acme/legacy-api')?.root, old);
-  const saved = JSON.parse(readFileSync(join(home, 'apps.json'), 'utf8'));
-  assert.equal(saved.find((a) => a.root === old).remote, 'gitlab.com/acme/legacy-api');
-  assert.deepEqual(validate(saved, appsSchema), []);
 });

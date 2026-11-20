@@ -44,15 +44,9 @@ export function normalizeRemote(url) {
 const remoteOf = (root) => { try { return normalizeRemote(execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()); } catch { return null; } };
 
 // The app on this Mac whose repo is `repo` (host/owner/name), for linking a frontend to its backends.
-// Entries added before remotes were recorded get theirs filled in the first time they're looked up.
 export function findAppByRepo(repo) {
-  const want = normalizeRemote(repo);
-  if (!want) return null;
-  const apps = listApps();
-  let changed = false;
-  for (const a of apps) if (!('remote' in a)) { a.remote = remoteOf(a.root); changed = true; }
-  if (changed) writeFileSync(FILE, JSON.stringify(apps, null, 2));
-  return apps.find((a) => a.remote?.toLowerCase() === want.toLowerCase()) ?? null;
+  const want = normalizeRemote(repo)?.toLowerCase();
+  return want ? listApps().find((a) => a.remote?.toLowerCase() === want) ?? null : null;
 }
 
 // Takes an app off the list. Its repo, test plan and saved tests are left where they are.

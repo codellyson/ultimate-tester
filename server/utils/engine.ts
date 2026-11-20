@@ -67,6 +67,8 @@ export function runDetail(root: string, id: string) {
     typicalMs: typicalDuration(root),
     steps: (read(join(dir, 'live.log')) ?? '').split('\n').filter(Boolean),
     verdict: json(join(dir, 'verdict.json')) ?? null,
+    // The apps in this test (this one and any linked backends), with the branch each was on.
+    apps: json(join(dir, 'apps.json')) ?? null,
     shots: readdirSync(dir).filter((f: string) => f.endsWith('.png')).sort(),
   }
 }
