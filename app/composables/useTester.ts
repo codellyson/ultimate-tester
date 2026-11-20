@@ -3,8 +3,8 @@ import type { Target } from '~/utils/format'
 
 export type App = { id: string, name: string, root: string, profileReady: boolean, signedIn: boolean, onboarded: boolean, running: boolean, last: RunInfo | null }
 export type RunInfo = { id: string, status: string, summary: string, title: string, kind?: string | null, target?: string | null, note?: string, counts?: { pass: number, fail: number, unk: number }, shotCount?: number }
-export type PlanItem = { name: string, why?: string, source?: string, status: string, note?: string, persona?: string, app?: string }
-export type Flow = { name: string, app?: string, status: string, steps?: string[], expected?: string, actual?: string, evidence?: string[], url?: string, persona?: string, needs?: string, setupBy?: 'tess' | 'person', requests?: Req[] }
+export type PlanItem = { name: string, why?: string, source?: string, status: string, note?: string, persona?: string, app?: string, replayed?: boolean }
+export type Flow = { name: string, app?: string, replayed?: boolean, status: string, steps?: string[], expected?: string, actual?: string, evidence?: string[], url?: string, persona?: string, needs?: string, setupBy?: 'tess' | 'person', requests?: Req[] }
 export type Req = { method: string, path: string, sent?: string, status: number, ms?: number, got?: string, expected?: string }
 export type Verdict = { status: string, summary: string, flows: Flow[], durationMs?: number, usage?: string }
 export type RunDetail = RunInfo & {
@@ -18,7 +18,7 @@ export type PlanQuestion = { field: string, question: string, value: unknown, ki
 export type Setup = {
   profile: string, profileHash: string, profileReady: boolean, planFormat?: "json" | "md" | null, planJson?: Record<string, unknown> | null, backends?: { name: string, repo: string, env: string, whenMissing: 'dev' | 'stop', found: { name: string, where: string, branch: string | null, commit: string | null, dirty: boolean, planOk: boolean } | null }[], planErrors?: string[], questions?: PlanQuestion[], onboarded: boolean, changed?: boolean, triggers: { stop: boolean, commit: boolean }, remotes: string[],
   personas: Persona[], allSignedIn: boolean, signingIn: string | null, running: boolean, start?: { command: string | null, url: string | null },
-  job: { kind: string | null, status: string, message: string, steps: string[] }
+  job: { kind: string | null, status: string, message: string, steps: string[], since?: number, tail?: string, persona?: string, stages?: { label: string, state: "done" | "now" | "todo" }[] }
 }
 
 export const OTHER = '__other__'
@@ -176,7 +176,7 @@ async function startTest(t: Target) {
   const { kind, target } = t
   if (kind === 'custom') { state.sheet = true; return }
   try {
-    await api(`/api/apps/${state.appId}/run`, { kind, target, note: state.note })
+    await api(`/api/apps/${state.appId}/run`, { kind, target, note: state.note, replayFrom: t.replayFrom })
     state.note = ''
     state.follow = true
     // Jump to the new test only if the person is still where they started it from.
@@ -189,7 +189,7 @@ async function startTest(t: Target) {
 async function rerun(r: { kind?: string | null, target?: string | null, note?: string } | null = state.view === 'run' ? state.detail?.change ?? null : null) {
   if (!r) { state.flash = 'Open a test first, then run it again.'; return }
   state.note = r.note ?? ''
-  await startTest({ kind: r.kind ?? 'changes', target: r.target ?? undefined })
+  await startTest({ kind: r.kind ?? 'changes', target: r.target ?? undefined, replayFrom: state.view === 'run' ? state.detail?.id : undefined })
 }
 
 async function stopTest() {

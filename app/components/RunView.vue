@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowClockwise, PhArrowRight, PhCopy, PhGlobeSimple, PhStop, PhXCircle, PhCircleDashed } from '@phosphor-icons/vue'
+import { PhArrowClockwise, PhArrowRight, PhCopy, PhGlobeSimple, PhStop, PhXCircle, PhCircleDashed, PhSpeakerHigh, PhSpeakerSlash } from '@phosphor-icons/vue'
 // A test: the verdict first, then what Tess saw (driven by the selected check), Tess's words, and the checks.
 import type { PlanItem, Persona, Req } from '~/composables/useTester'
 const { state, openSettings, rerun, stopTest, startTest, tauri } = useTester()
@@ -149,7 +149,11 @@ const metaLine = computed(() => {
   const hash = c?.message.match(/^([0-9a-f]{7,40}) /)?.[1]?.slice(0, 7)
   const files = c?.files?.length ? `${c.files.length} file${plural(c.files.length)}` : ''
   const mins = v.value ? `${Math.round((v.value.durationMs ?? 0) / 60000) || '<1'} min` : ''
-  return [hash, files, mins, when(r.value.id)].filter(Boolean).join(' · ')
+  // How much Tess was needed: checks replayed from saved steps (free) and checks she did this time.
+  const flows = v.value?.flows ?? []
+  const rep = flows.filter((f) => f.replayed).length
+  const split = rep ? `${rep} replayed${flows.length - rep ? `, ${flows.length - rep} by Tess` : ', no Claude call'}` : ''
+  return [hash, files, mins, split, when(r.value.id)].filter(Boolean).join(' · ')
 })
 
 const now = ref(Date.now())
@@ -231,6 +235,18 @@ const chips = computed(() => (live.value ? r.value.steps.map(chipText).filter((c
 const failing = computed(() => plan.value.find((p) => p.status === 'fail'))
 
 const says = computed(() => r.value.steps.filter((s) => s.startsWith('say: ')).map((s) => s.slice(5)))
+// Voice readout: each new line Tess says while testing, then her summary once the test ends.
+const voice = useVoice()
+watch(() => says.value.length, (n, was) => { if (live.value && n > (was ?? n)) voice.say(says.value.at(-1)!) })
+watch(() => [r.value.id, r.value.status] as const, ([id, st], old) => {
+  if (old && id === old[0] && old[1] === 'running' && st !== 'running' && v.value?.summary) voice.say(bubble.value, { interrupt: true })
+})
+onBeforeUnmount(() => voice.stop())
+// Turning it on reads what's on screen now: her latest line while testing, her summary once done.
+async function toggleVoice() {
+  await voice.set(!voice.on.value)
+  if (voice.on.value) voice.say(bubble.value, { interrupt: true })
+}
 // The headline is the verdict; the bubble is Tess explaining it. A verdict phrase opening her summary is
 // dropped, so the two can never disagree ("4 checks still need a look" above, "Safe to push." below).
 const VERDICT_LEAD = /^\s*(safe to push|don['’]t push yet|not safe yet|can['’]t say yet)[^.!?:]*[.!?:]\s*/i
@@ -349,6 +365,12 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
         </div>
       </div>
       <div class="flex gap-2 shrink-0 pt-px">
+        <span v-if="voice.unavailable.value" class="self-center max-w-56 text-[12px] leading-tight text-[var(--muted)] text-end" role="status">{{ voice.unavailable.value }}</span>
+        <button
+          v-if="voice.supported" class="btn size-8 px-0 justify-center" :aria-pressed="voice.on.value"
+          :title="voice.on.value ? 'Stop reading Tess aloud' : 'Read Tess aloud'" :aria-label="voice.on.value ? 'Stop reading Tess aloud' : 'Read Tess aloud'"
+          @click="toggleVoice"
+        ><component :is="voice.on.value ? PhSpeakerHigh : PhSpeakerSlash" class="size-4" aria-hidden="true" /></button>
         <button v-if="live && state.setup?.running" class="btn" title="Stop this test (⌘.)" @click="stopTest()"><PhStop class="size-4" aria-hidden="true" />Stop</button>
         <template v-if="finished && r.change">
           <button class="btn-blue" title="Run this test again (⌘R)" :disabled="!!state.setup?.running" @click="rerun()"><PhArrowClockwise class="size-4" aria-hidden="true" />{{ isSetup ? 'Set up again' : 'Test again' }}</button>

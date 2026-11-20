@@ -44,7 +44,20 @@ export function createActions(root) {
   let signIn = null; // { win, app }
   let run = null;
 
-  const set = (kind, status, message, steps = []) => { job = { kind, status, message, steps }; };
+  // A slow job's state. While the same job goes on, it keeps when it started, who it's for and its steps.
+  const set = (kind, status, message, steps = []) => {
+    const same = job.kind === kind && ['working', 'waiting'].includes(job.status);
+    job = { kind, status, message, steps, since: same ? job.since : Date.now(), ...(same ? { persona: job.persona, stages: job.stages } : {}) };
+  };
+  // The named steps of each slow job, shown in place with the current one live (DESIGN.md · Working).
+  const STAGES = {
+    signin: ['Find a free port', 'Start your app', 'Open Chrome on it', "You sign in there, then press I'm signed in"],
+    draft: ['Read your repo and write the plan', 'Check it against the schema', 'Save it'],
+    convert: ['Turn your plan into JSON', 'Check it against the schema', 'Show it to you'],
+  };
+  const stage = (n) => { const labels = STAGES[job.kind]; if (labels) job.stages = labels.map((label, i) => ({ label, state: i < n ? 'done' : i === n ? 'now' : 'todo' })); };
+  // Cancel: what a slow job is running right now, so it can be stopped.
+  let cancelled = false, currentChild = null, startingApp = null;
 
   // Only the release bases the window offers (TARGETS in app/utils/format.ts); a big repo has hundreds of branches.
   const RELEASE_BASES = ['origin/prd', 'origin/main'];
@@ -95,6 +108,7 @@ export function createActions(root) {
     const child = spawn('claude', ['-p', '--model', MODEL, '--output-format', 'stream-json', '--verbose', '--no-session-persistence', '--setting-sources', '',
       '--json-schema', JSON.stringify(schema), ...(tools.length ? ['--allowedTools', ...tools] : []), '--disallowedTools', 'Bash', 'Edit', 'Write', ...(tools.length ? [] : ['Read', 'Glob', 'Grep'])],
     { cwd: root, env: { ...process.env, ULTIMATE_TESTER_CHILD: '1' } });
+    currentChild = child;
     let buf = '', result = null;
     child.stdout.on('data', (d) => {
       buf += d;
@@ -181,7 +195,9 @@ export function createActions(root) {
     // What she couldn't work out from the repo comes back as questions, asked once in setup.
     draftProfile() {
       if (busy()) throw new Error('Something else is still working');
+      cancelled = false;
       set('draft', 'working', 'Tess is reading the repo…');
+      stage(0);
       return draftPlan().catch((e) => set('draft', 'error', `Tess could not draft the plan: ${e.message}`, job.steps));
     },
   };
@@ -199,13 +215,15 @@ export function createActions(root) {
 
 In "unsure", list each answer you could not work out from the repo (the schema marks the usual ones with x-ask): "field" is its path, like "personas[2].signIn", "urls.never" or "mustNeverBreak"; "question" is the plain question to ask the developer. Still fill those fields with your best guess so the plan passes the schema.`;
   const PLAN_OUT = { type: 'object', required: ['plan', 'unsure'], properties: { plan: { type: 'string' }, unsure: { type: 'array', items: { type: 'object', required: ['field', 'question'], properties: { field: { type: 'string' }, question: { type: 'string' } } } } } };
-  const say = (t) => { if (t && job.steps.at(-1) !== t) job.steps = [...job.steps, t].slice(-40); };
+  const say = (t) => { if (t && job.steps.at(-1) !== t) { job.steps = [...job.steps, t].slice(-40); job.tail = t; } };
   const rel = (f = '') => f.startsWith(root) ? f.slice(root.length + 1) : f;
   const onTool = (name, i) => say(name === 'Read' ? `Reading ${rel(i.file_path)}` : name === 'Grep' ? `Searching for “${i.pattern}”` : name === 'Glob' ? `Looking for ${i.pattern}` : null);
   // Tess writes a plan, the validator checks it, and she gets one repair round with the exact problems.
   // Resolves to { json, unsure } or { errors }; nothing is saved here.
   async function planFromClaude(ask, tools) {
     let draft = await askClaude(`${ask}\n\n${JSON.stringify(planSchema())}\n\n${PLAN_RULES}`, PLAN_OUT, tools, onTool);
+    if (cancelled) return { cancelled: true };
+    stage(1);
     let json = null, errors = ['Tess returned no plan'];
     const check = () => { try { json = JSON.parse(draft.plan); errors = validate(json); } catch (e) { errors = [`not valid JSON: ${e.message}`]; } };
     if (draft) check();
@@ -213,6 +231,7 @@ In "unsure", list each answer you could not work out from the repo (the schema m
       say('Fixing the plan so it passes its schema');
       const fixed = await askClaude(`This test plan fails its JSON Schema:\n${errors.slice(0, 20).map((x) => `- ${x}`).join('\n')}\n\nPlan:\n${draft.plan}\n\nSchema:\n${JSON.stringify(planSchema())}\n\nReturn the corrected plan as text in "plan", changing only what the problems need.`, { type: 'object', required: ['plan'], properties: { plan: { type: 'string' } } }, [], () => {});
       if (fixed) { draft = { ...draft, plan: fixed.plan }; check(); }
+      if (cancelled) return { cancelled: true };
     }
     if (errors.length) return { errors };
     return { json, unsure: (draft.unsure ?? []).filter((q) => getAt(json, q.field) !== undefined) };
@@ -221,9 +240,12 @@ In "unsure", list each answer you could not work out from the repo (the schema m
 
   async function draftPlan() {
     const r = await planFromClaude('Read this repository (package.json, README, CLAUDE.md or AGENTS.md, .claude/launch.json, .env.example) and write its Ultimate Tester test plan: JSON that passes this JSON Schema exactly. Return the JSON as text in "plan".', ['Read', 'Glob', 'Grep']);
+    if (r.cancelled) return;
     if (r.errors) return set('draft', 'error', `Tess could not draft a plan that passes its schema: ${r.errors[0]}`, job.steps);
+    stage(2);
     savePlanJson(root, r.json);
     saveQuestions(r.unsure);
+    stage(3);
     set('draft', 'done', 'Drafted. Read it and fix anything wrong.', job.steps);
   }
 
@@ -234,7 +256,9 @@ In "unsure", list each answer you could not work out from the repo (the schema m
   async function convertPlan() {
     const md = readPlan(root).text;
     const r = await planFromClaude(`Turn this Ultimate Tester test plan from its old Markdown form into JSON that passes the JSON Schema below. Keep every fact it states: the start command, ports, test data, hosts to avoid, commands never to run, every person, every must-never-break item, every note, lesson and test-data recipe, worded the same where you can. You may read the repo to fill gaps (like the port or where a command runs). Return the JSON as text in "plan".\n\nOld plan:\n${md}`, ['Read', 'Glob', 'Grep']);
+    if (r.cancelled) return;
     if (r.errors) return set('convert', 'error', `Tess could not convert the plan: ${r.errors[0]}`, job.steps);
+    stage(3);
     mkdirSync(state, { recursive: true });
     writeFileSync(proposalFile, JSON.stringify({ plan: r.json, unsure: r.unsure }, null, 2));
     set('convert', 'done', 'Converted. Check it, then use it.', job.steps);
@@ -246,12 +270,23 @@ In "unsure", list each answer you could not work out from the repo (the schema m
       answerPlan(root, field, value);
       keepGuess(field);
     },
+    // Cancel the slow job under way: stops what it started (Tess's reading, your app, the sign-in window).
+    cancelJob() {
+      if (!['working', 'waiting'].includes(job.status)) return;
+      cancelled = true;
+      try { currentChild?.kill(); } catch {}
+      try { if (startingApp) process.kill(-startingApp.pid); } catch {}
+      if (signIn) { try { signIn.win.close(); } catch {} try { if (signIn.app) process.kill(-signIn.app.pid); } catch {} signIn = null; }
+      set(job.kind, 'cancelled', 'Stopped.');
+    },
     // "Keep your guess": the draft's answer stays as it is.
     keep(field) { keepGuess(field); },
     convertPlan() {
       if (busy()) throw new Error('Something else is still working');
       if (readPlan(root).format !== 'md') throw new Error('There is no old plan to convert');
+      cancelled = false;
       set('convert', 'working', 'Tess is turning your plan into JSON…');
+      stage(0);
       return convertPlan().catch((e) => set('convert', 'error', `Tess could not convert the plan: ${e.message}`, job.steps));
     },
     // Use the converted plan: the JSON is written (checked again), its questions queued, and the old .md removed.
@@ -283,35 +318,65 @@ In "unsure", list each answer you could not work out from the repo (the schema m
       if (busy() || signIn) throw new Error('Something else is still working');
       const who = personasNow().find((p) => p.key === persona && p.signIn);
       if (!who) return set('signin', 'error', 'Choose a persona from the profile that signs in');
+      // Said before anything slow, so the page shows it the moment the button is pressed.
+      cancelled = false;
+      set('signin', 'working', `Starting your app to sign in as ${who.label}…`);
+      job.persona = who.key;
+      stage(0);
       // Its own port, never a server someone else is running; cookies on localhost carry across ports.
       const { command, url } = parseStart(withPort(readPlan(root).text, await freePort()));
-      if (!command || !url) return set('signin', 'error', 'The profile needs a start command and a localhost URL under Start');
-      set('signin', 'working', `Starting your app to sign in as ${who.label}…`);
+      if (!command || !url) { set('signin', 'error', 'The profile needs a start command and a localhost URL under Start'); return; }
+      stage(1);
       let app = null;
+      // Starts the app and waits for it, showing its latest output line as it goes. If it quits before it
+      // answers, say so at once with its last words instead of waiting out the full four minutes.
+      const startApp = (cmd) => new Promise((resolve) => {
+        app = startingApp = spawn('sh', ['-c', cmd], { cwd: root, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: childEnv() });
+        let tail = '';
+        const take = (d) => { tail = (tail + d).slice(-4000); const last = tail.trim().split('\n').pop()?.replace(/\x1b\[[0-9;]*m/g, '').trim(); if (last) job.tail = last.slice(0, 200); };
+        app.stdout.on('data', take); app.stderr.on('data', take);
+        app.on('exit', (code) => resolve({ ok: false, tail, code }));
+        waitFor(url, 240_000).then((ok) => resolve({ ok, tail, timedOut: !ok }));
+      });
       try {
-        app = spawn('sh', ['-c', command], { cwd: root, detached: true, stdio: 'ignore', env: childEnv() });
-        if (!(await waitFor(url, 240_000))) throw new Error(`Your app did not answer at ${url} within 4 minutes`);
+        let r = await startApp(command);
+        // Your own copy of a Nuxt app is running from this folder: start this one with its own build folder.
+        if (!r.ok && /Another Nuxt (dev server|build) is already|NUXT_IGNORE_LOCK|holds the lock|nuxt\.lock/i.test(r.tail)) {
+          job.tail = 'Your own copy is running here, so I start mine with its own build folder';
+          r = await startApp(`${command} --extends ${JSON.stringify(join(HOME, 'own-build', 'nuxt'))}`);
+        }
+        if (cancelled) return;
+        if (!r.ok) {
+          const last = r.tail.trim().split('\n').filter(Boolean).slice(-3).join(' ').replace(/\x1b\[[0-9;]*m/g, '').slice(0, 300);
+          throw new Error(r.timedOut ? `Your app didn't answer at ${url} within 4 minutes.${last ? ` Its last output: ${last}` : ''}` : `Your app stopped before it was ready${last ? `: ${last}` : '.'}`);
+        }
+        stage(2);
         mkdirSync(state, { recursive: true });
         // A Chrome profile per persona, so signing in as one never reuses another's cookies.
         signIn = { app, persona: who.key, win: await signInWindow(url, join(state, 'signin-profile', who.key)) };
+        if (cancelled) { signIn.win.close(); try { process.kill(-app.pid); } catch {} signIn = null; return; }
         set('signin', 'waiting', `A Chrome window is open. Sign in there as ${who.label}, then come back and press "I'm signed in".`);
+        stage(3);
       } catch (e) {
         if (app) try { process.kill(-app.pid); } catch {}
-        set('signin', 'error', e.message);
-      }
+        if (!cancelled) set('signin', 'error', e.message);
+      } finally { startingApp = null; }
     },
 
     async signInFinish() {
       if (!signIn) throw new Error('No sign-in window is open');
-      try {
-        mkdirSync(join(state, 'sessions'), { recursive: true });
-        const n = await signIn.win.save(join(state, 'sessions', `${signIn.persona}.json`));
-        set('signin', n ? 'done' : 'error', n ? `Saved. Tess will start signed in on every run.` : 'No sign-in found in that window. Try again.');
-      } finally {
-        signIn.win.close();
-        if (signIn.app) try { process.kill(-signIn.app.pid); } catch {}
-        signIn = null;
+      mkdirSync(join(state, 'sessions'), { recursive: true });
+      const n = await signIn.win.save(join(state, 'sessions', `${signIn.persona}.json`));
+      // Not signed in yet: keep Chrome and the app open so the person can finish, and say so.
+      if (!n) {
+        job.message = "I don't see a sign-in in that Chrome window yet. Finish signing in there (check for an email code if it asks), then press I'm signed in again.";
+        return;
       }
+      stage(4);
+      set('signin', 'done', 'Saved. Tess will start signed in on every run.');
+      signIn.win.close();
+      if (signIn.app) try { process.kill(-signIn.app.pid); } catch {}
+      signIn = null;
     },
 
     // "Always keep in mind": the profile's Notes for Tess section.
@@ -361,7 +426,7 @@ In "unsure", list each answer you could not work out from the repo (the schema m
     },
 
     // kind: "changes" | "commit" | "range"; target: sha or base..head; note: extra instructions for this run only.
-    startRun(kind, target, note) {
+    startRun(kind, target, note, replayFrom) {
       if (typeof note === 'string' && note.length > 1000) throw new Error('Keep the note under 1000 characters');
       if (run || activeRun()) throw new Error('A test is already running');
       if (kind === 'setup' && !/^[\w-]+$/.test(target ?? '')) throw new Error('Pick a finished test to set up for');
@@ -377,6 +442,8 @@ In "unsure", list each answer you could not work out from the repo (the schema m
       }
       // Detached so a test keeps going if the app or engine restarts mid-run.
       if (note?.trim()) args.push('--note', note.trim());
+      // Test again: replay that test's checks first, so only what's left goes to Tess.
+      if (typeof replayFrom === 'string' && /^[\w-]+$/.test(replayFrom)) args.push('--replay-from', replayFrom);
       run = spawn(process.execPath, [CLI, 'run', ...args], { cwd: root, stdio: 'ignore', detached: true, env: childEnv() });
       run.on('close', () => { run = null; });
       run.unref();

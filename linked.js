@@ -30,7 +30,7 @@ export async function startBackends(root, runDir, { start = true } = {}) {
   const plan = readPlan(root);
   const links = plan.format === 'json' ? plan.json.backends ?? [] : [];
   const self = { name: basename(root), role: 'app', ...checkoutOf(root) };
-  const procs = [], apps = [self], lines = [], diffs = [];
+  const procs = [], apps = [self], lines = [], diffs = [], env = {};
   let blocked = null;
   for (const b of links) {
     const found = findAppByRepo(b.repo);
@@ -57,6 +57,7 @@ export async function startBackends(root, runDir, { start = true } = {}) {
     const co = found ? checkoutOf(found.root) : {};
     if (url) {
       apps.push({ name: b.name, role: 'backend', source: 'local', where: home(found.root), url, ...co });
+      env[b.env] = url;
       lines.push(`- ${b.name}: your local copy (${home(found.root)}, ${co.branch ?? 'no branch'} @ ${co.commit ?? '?'}${co.dirty ? ', with uncommitted changes' : ''}) is running at ${url}. Start this app with ${b.env}=${url} in its environment, so it calls this copy.`);
       if (co.branch && self.branch && co.branch !== self.branch) lines.push(`  Note: ${b.name} is on ${co.branch}, not ${self.branch}. Say so in the summary.`);
       const d = git(found.root, 'diff', 'HEAD');
@@ -71,5 +72,5 @@ export async function startBackends(root, runDir, { start = true } = {}) {
   }
   const stop = () => { for (const p of procs) { try { process.kill(-p.pid, 'SIGTERM'); } catch {} } };
   if (blocked) stop();
-  return { apps, lines, diffs, blocked, stop, linked: links.length > 0 };
+  return { apps, lines, diffs, env, blocked, stop, linked: links.length > 0 };
 }

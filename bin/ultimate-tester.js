@@ -9,6 +9,7 @@ const PORT = Number(process.env.ULTIMATE_TESTER_PORT ?? 4600);
 import { startBrowser, freePort, useSession } from '../live.js';
 import { readPlan, addEnvironment, PLAN_FILES } from '../plan.js';
 import { startBackends } from '../linked.js';
+import { listReplays, saveReplays, runReplays, startOwnApp } from '../replay.js';
 import { sessionFile } from '../actions.js';
 import { addApp, readSettings } from '../apps.js';
 
@@ -70,10 +71,11 @@ function collectChange(commit, range) {
   return { mode: 'uncommitted changes', files: [...tracked, ...untracked].filter((f) => !PLAN_FILES.includes(f)), diff, message: '(not committed yet)' };
 }
 
-async function runTester(prompt, runDir) {
+async function runTester(prompt, runDir, shared = null) {
   // A backend with no pages ("- Browser: not needed" under Start) is tested with requests only: no browser at all.
   const noBrowser = /^- Browser:\s*not needed/im.test(readPlan(root()).text);
-  const browser = noBrowser ? null : await startBrowser(runDir);
+  // A browser already opened for replays is reused, and left for the caller to stop.
+  const browser = shared ?? (noBrowser ? null : await startBrowser(runDir));
   const browserArgs = browser ? ['--cdp-endpoint', browser.endpoint] : ['--headless', '--isolated'];
   const mcpFile = join(runDir, 'mcp.json');
   writeFileSync(mcpFile, JSON.stringify({
@@ -121,7 +123,7 @@ async function runTester(prompt, runDir) {
       clearTimeout(timer);
       process.off('SIGTERM', stop);
       process.off('SIGINT', stop);
-      browser?.stop();
+      if (!shared) browser?.stop();
       writeFileSync(join(runDir, 'claude-output.jsonl'), out || err);
       try {
         const j = result ?? {};
@@ -220,7 +222,7 @@ async function setupEnv(source) {
 }
 
 // Returns { status, report } — status is pass | fail | unverified | skip.
-async function run({ commit = null, range = null, dedupe = false, note = '' } = {}) {
+async function run({ commit = null, range = null, dedupe = false, note = '', replayFrom = null } = {}) {
   process.chdir(root());
   const testPlan = readPlan(root());
   if (!testPlan.format) return { status: 'skip', report: `No ${PROFILE}. Run: ultimate-tester init` };
@@ -254,7 +256,41 @@ async function run({ commit = null, range = null, dedupe = false, note = '' } = 
     writeFileSync(join(runDir, 'verdict.json'), JSON.stringify(verdict, null, 2));
     return { status: 'unverified', report: `Ultimate Tester: ${verdict.summary}` };
   }
+  // Replays first: checks Tess has done before, rerun from her scripts with no Claude call. Every saved
+  // must-never-break check, plus (on Test again) every check of the test being repeated.
+  const runsDir = join(process.cwd(), STATE, 'runs');
+  let againNames = [];
+  if (replayFrom && /^[\w-]+$/.test(replayFrom)) { try { againNames = JSON.parse(readFileSync(join(runsDir, replayFrom, 'verdict.json'), 'utf8')).flows.map((f) => f.name); } catch {} }
+  const mnb = testPlan.json?.mustNeverBreak?.map((m) => m.check) ?? null;
+  const wanted = listReplays(root()).filter((r) => againNames.includes(r.name) || (r.source === 'must-never-break' && (!mnb || mnb.includes(r.name))));
+  const noBrowser = /^- Browser:\s*not needed/im.test(testPlan.text);
+  let shared = null, own = null, replayed = [];
+  if (wanted.length && !noBrowser) {
+    shared = await startBrowser(runDir);
+    own = shared && await startOwnApp(root(), port, runDir, linked.env, join(HOME, 'own-build', 'nuxt'));
+    if (own?.url) {
+      const list = parsePersonas(testPlan.text);
+      const items = wanted.map((r) => ({ name: r.name, source: r.source ?? 'diff', status: 'running', note: 'Replaying', replayed: true }));
+      writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items));
+      try {
+        replayed = await runReplays(wanted, {
+          endpoint: shared.endpoint, base: own.url, runDir,
+          backends: Object.fromEntries(linked.apps.filter((a) => a.url).map((a) => [a.name, a.url])),
+          sessionFor: (key) => { const p = list.find((x) => x.key === key); return p?.signIn ? sessionFile(join(process.cwd(), STATE), key, list) : null; },
+          onEach: (res) => { const it = items.find((i) => i.name === res.name); Object.assign(it, { status: res.ok ? 'pass' : 'running', note: res.ok ? `Replayed. ${res.notes.at(-1) ?? ''}`.trim() : 'Replay failed; Tess will look again' }); writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items)); },
+        });
+      } catch (e) { appendFileSync(join(runDir, 'live.log'), `say: I couldn't run the saved replays (${e.message.split('\n')[0]}), so I'll check everything myself.\n`); }
+    }
+  }
+  const passedR = replayed.filter((r) => r.ok), failedR = replayed.filter((r) => !r.ok);
+  const replayFlows = passedR.map((r) => ({ name: r.name, status: 'pass', source: r.source ?? 'diff', persona: r.persona ?? undefined, evidence: [join(runDir, r.shot)], actual: r.notes.join(' ') || 'Replayed; every step passed.', replayed: true }));
+  const replayedText = !replayed.length ? 'No checks were replayed this time.' : [
+    passedR.length ? `These checks already passed by replay just now; don't check them again and don't list them in plan.json or the verdict: ${passedR.map((r) => `"${r.name}"`).join(', ')}.` : '',
+    failedR.length ? `These replays failed. Check each one yourself as a normal flow with the same name, say whether the app is broken or the replay was out of date, and give a new replay either way:\n${failedR.map((r) => `  - "${r.name}": ${r.error}`).join('\n')}` : '',
+    own?.url ? `Your copy of the app is already running at ${own.url} (port {{PORT}}), started for the replays. Use it; don't start another and don't stop it.` : '',
+  ].filter(Boolean).join('\n');
   const prompt = readFileSync(join(HOME, 'prompt.md'), 'utf8')
+    .replace('{{REPLAYED}}', () => replayedText)
     .replace('{{BACKENDS}}', () => (linked.linked ? linked.lines.join('\n') : 'None. This app is tested on its own.'))
     .replace('{{BACKEND_DIFFS}}', () => linked.diffs.join('\n\n') || 'None.')
     .replace('{{PROFILE}}', () => withPort(readPlan(root()).text, port))
@@ -271,12 +307,25 @@ async function run({ commit = null, range = null, dedupe = false, note = '' } = 
 
   if (!HEADLESS) await openWindow();
   const started = Date.now();
-  let raw, costUsd;
-  try { ({ verdict: raw, costUsd } = await runTester(prompt, runDir)); } finally { linked.stop(); }
+  let raw, costUsd = 0;
+  // Test again where every check replayed and passed: nothing left for Tess, so no Claude session at all.
+  const allReplayed = replayFrom && againNames.length && !failedR.length && againNames.every((n) => passedR.some((r) => r.name === n));
+  try {
+    if (allReplayed) raw = { status: 'pass', summary: `I replayed all ${passedR.length} checks from the last test and every one passed, so I didn't need to look again.`, flows: [] };
+    else ({ verdict: raw, costUsd } = await runTester(prompt, runDir, shared));
+  } finally { linked.stop(); own?.stop?.(); shared?.stop(); }
+  // Tess's own checks win over a replay of the same name; replays she didn't redo stand as passed.
+  raw = { ...raw, flows: [...replayFlows.filter((r) => !(raw.flows ?? []).some((f) => f.name === r.name)), ...(raw.flows ?? [])] };
   // Hold the verdict to Tess's own plan: anything planned but not reported counts as not checked.
   let plan = [];
   try { plan = JSON.parse(readFileSync(join(runDir, 'plan.json'), 'utf8')); } catch {}
+  if (replayFlows.length) {
+    plan = [...replayFlows.map((r) => ({ name: r.name, source: r.source, status: 'pass', note: 'Replayed', replayed: true })), ...plan.filter((p) => !p.replayed && !replayFlows.some((r) => r.name === p.name))];
+    writeFileSync(join(runDir, 'plan.json'), JSON.stringify(plan));
+  }
   const verdict = enforceEvidence(raw, plan);
+  // Every check Tess performed leaves a replay for next time.
+  try { saveReplays(root(), verdict.flows, basename(runDir)); } catch {}
   const usage = usageLabel({ ...billing(), costUsd });
   const report = renderReport(verdict, { runDir, durationS: Math.round((Date.now() - started) / 1000), usage });
   writeFileSync(join(runDir, 'verdict.json'), JSON.stringify({ ...verdict, costUsd, usage, model: MODEL, durationMs: Date.now() - started }, null, 2));
@@ -383,7 +432,8 @@ switch (cmdName) {
     const r = rest.indexOf('--range');
     const n = rest.indexOf('--note');
     const su = rest.indexOf('--setup');
-    const { status, report } = su >= 0 ? await setupEnv(rest[su + 1] ?? '') : await run({ commit, range: r < 0 ? null : rest[r + 1], note: n < 0 ? '' : rest[n + 1] ?? '' });
+    const rf = rest.indexOf('--replay-from');
+    const { status, report } = su >= 0 ? await setupEnv(rest[su + 1] ?? '') : await run({ commit, range: r < 0 ? null : rest[r + 1], note: n < 0 ? '' : rest[n + 1] ?? '', replayFrom: rf < 0 ? null : rest[rf + 1] ?? null });
     console.log(report);
     process.exit(exitFor[status]);
   }

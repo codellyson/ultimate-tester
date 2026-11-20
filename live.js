@@ -50,7 +50,8 @@ export async function signInWindow(url, profileDir) {
   return {
     save: async (file) => {
       const { cookies } = await browserCall(endpoint, 'Storage.getCookies');
-      writeFileSync(file, JSON.stringify({ savedAt: new Date().toISOString(), url, cookies }), { mode: 0o600 });
+      // Nothing to keep yet: save nothing, so the person isn't shown as signed in when they aren't.
+      if (cookies.length) writeFileSync(file, JSON.stringify({ savedAt: new Date().toISOString(), url, cookies }), { mode: 0o600 });
       return cookies.length;
     },
     close: () => chrome.kill(),

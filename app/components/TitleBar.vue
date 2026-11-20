@@ -1,12 +1,33 @@
 <script setup lang="ts">
 import { PhHouse, PhPlus, PhClockCounterClockwise, PhMoon, PhSun } from '@phosphor-icons/vue'
 // One bar: Home / app / test (the test is a menu), connection trouble, New test and ⌘K.
-const { state, openRun, startTest, addApp, show, tauri } = useTester()
+const { state, openRun, startTest, addApp, show, tauri, setupAction, stopTest } = useTester()
 const app = computed(() => state.apps.find((a) => a.id === state.appId))
 // One click between dark and light; Settings also offers "Same as Mac".
 const look = useAppearance()
 const isDark = computed(() => look.mode.value === 'dark' || (look.mode.value === 'system' && document.documentElement.dataset.theme === 'dark'))
 const run = computed(() => state.runs.find((r) => r.id === state.runId))
+// One status pill for anything slow, seen from every screen (DESIGN.md · Working): what it is, how long, Cancel.
+const now = ref(Date.now())
+const ticker = setInterval(() => { now.value = Date.now() }, 1000)
+onBeforeUnmount(() => clearInterval(ticker))
+const clock = (since?: number) => { const s = since ? Math.max(0, Math.round((now.value - since) / 1000)) : 0; return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` }
+// A run id is its start time ("2026-11-20T02-18-59-410Z").
+const startedAt = (id?: string) => (id ? Date.parse(id.replace(/T(\d+)-(\d+)-(\d+)-(\d+)Z$/, 'T$1:$2:$3.$4Z')) : undefined)
+const working = computed(() => {
+  const s = state.setup, j = s?.job, name = app.value?.name ?? 'your app'
+  if (j && ['working', 'waiting'].includes(j.status)) {
+    const who = s?.personas.find((p) => p.key === j.persona)?.key
+    const text = j.kind === 'signin' ? (j.status === 'waiting' ? `Waiting for you to sign in as ${who}` : `Starting ${name} to sign in as ${who}`)
+      : j.kind === 'draft' ? `Reading ${name} to write its test plan` : j.kind === 'convert' ? `Converting ${name}'s test plan` : j.message
+    return { text, since: j.since, cancel: () => setupAction('cancel'), open: () => show('setup') }
+  }
+  if (s?.running) {
+    const latest = state.runs[0]
+    return { text: `Testing ${name}`, since: startedAt(latest?.id), cancel: () => stopTest(), open: () => latest && openRun(latest.id) }
+  }
+  return null
+})
 const runBtn = ref<HTMLElement>()
 const newBtn = ref<HTMLElement>()
 const left = ref(0)
@@ -38,6 +59,16 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
 
 <template>
   <header :class="['h-11 shrink-0 flex items-center gap-1.5 pe-3 border-b border-[var(--line)] bg-[var(--page)] text-[13px] relative', tauri() ? 'ps-[88px]' : 'ps-3']" data-tauri-drag-region>
+    <Transition name="fade">
+      <div v-if="working" class="absolute left-1/2 -translate-x-1/2 flex items-center rounded-full bg-[var(--accent)] text-[var(--on-accent)] h-7 ps-1 pe-1 text-[12.5px] font-medium shadow-[var(--lift)] max-w-[46%]" role="status" aria-live="polite">
+        <button class="flex items-center gap-2 ps-1.5 pe-2 min-w-0" :title="working.text" @click="working.open()">
+          <span class="tess breathe size-3.5 rounded-full shrink-0" aria-hidden="true" />
+          <span class="truncate">{{ working.text }}</span>
+          <span class="opacity-60 tabular-nums shrink-0">· {{ clock(working.since) }}</span>
+        </button>
+        <button class="shrink-0 rounded-full px-2 h-5 text-[12px] opacity-70 hover:opacity-100" @click="working.cancel()">Cancel</button>
+      </div>
+    </Transition>
     <button v-if="state.apps.length" :class="['crumb', state.home && 'bg-[var(--hover)]']" :aria-current="state.home ? 'page' : undefined" aria-label="Home" title="Home: all your apps" @click="state.menu = null; state.home = true"><PhHouse class="size-4" aria-hidden="true" /></button>
     <button
       v-if="!state.home || !state.apps.length" ref="appBtn" class="crumb font-medium"

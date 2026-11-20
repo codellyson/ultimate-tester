@@ -28,7 +28,7 @@ const showNote = computed(() => selected.value && props.item.name !== OTHER)
     >
       <component :is="st.icon" :class="['size-[17px] shrink-0 mt-px', st.cls]" aria-hidden="true" />
       <span class="sr-only">{{ st.word }}: </span>
-      <span class="flex-1">{{ label ?? item.name }}<span v-if="tag" class="ms-1.5 inline-block align-[1px] rounded-md bg-[var(--code)] px-1.5 text-[11px] font-normal text-[var(--muted)]">{{ tag }}</span></span>
+      <span class="flex-1">{{ label ?? item.name }}<span v-if="tag" class="ms-1.5 inline-block align-[1px] rounded-md bg-[var(--code)] px-1.5 text-[11px] font-normal text-[var(--muted)]">{{ tag }}</span><span v-if="item.replayed || details?.replayed" class="ms-1.5 inline-block align-[1px] rounded-md bg-[var(--code)] px-1.5 text-[11px] font-normal text-[var(--muted)]" title="Rerun from Tess's saved steps, with no Claude call">Replayed</span></span>
       <span v-if="shots > 1" class="text-[12px] font-normal text-[var(--faint)] shrink-0 tabular-nums">{{ shots }}</span>
     </component>
     <Transition name="reveal"><div v-if="showNote" class="selectable ms-[37px] me-2.5 mt-1 mb-1 flex flex-col gap-1.5 text-[12.5px] text-[var(--muted)]">

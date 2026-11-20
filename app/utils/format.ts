@@ -37,7 +37,7 @@ export const TARGETS = [
   { kind: 'range', target: 'origin/prd..HEAD', label: 'Release to prd', hint: 'everything going to prd' },
   { kind: 'range', target: 'origin/main..HEAD', label: 'Release to main', hint: 'everything going to main' },
 ] as const
-export type Target = { kind: string, target?: string, label?: string, hint?: string }
+export type Target = { kind: string, target?: string, label?: string, hint?: string, replayFrom?: string }
 
 // Release choices only for branches the repo actually has (no origin/prd, no "Release to prd").
 export const targetsFor = (remotes: string[] = []) =>

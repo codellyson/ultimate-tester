@@ -2,6 +2,7 @@
 // Settings for Ultimate Tester itself, the same for every app on this Mac.
 const { state, saveGeneral } = useTester()
 const g = computed(() => state.general)
+const voice = useVoice()
 const LIMITS = [8, 12, 20, 30, 45]
 </script>
 
@@ -15,6 +16,17 @@ const LIMITS = [8, 12, 20, 30, 45]
         </div>
         <AppearancePicker />
       </div>
+
+      <label v-if="voice.supported" class="flex items-center justify-between gap-6 py-6">
+        <span>
+          <span class="block font-medium">Read Tess aloud</span>
+          <span class="block text-[12px] text-[var(--muted)]">She says what she's checking as she tests, and her summary when she's done.</span>
+          <span v-if="voice.on.value && ['installing', 'loading'].includes(voice.status.value.state)" class="mt-1 flex items-center gap-2 text-[12px]" role="status"><span class="tess breathe size-3 rounded-full shrink-0" aria-hidden="true" />{{ voice.unavailable.value }}</span>
+          <span v-else-if="voice.on.value && voice.status.value.state === 'ready'" class="mt-1 block text-[12px] text-[var(--muted)]">Voice: Kokoro, Heart. It runs on this Mac.</span>
+          <span v-else-if="voice.on.value && voice.status.value.state === 'error'" class="mt-1 block text-[12px] text-[var(--bad)]" role="alert">{{ voice.unavailable.value }}</span>
+        </span>
+        <input type="checkbox" class="size-4 accent-[var(--accent)]" :checked="voice.on.value" @change="voice.set(($event.target as HTMLInputElement).checked)">
+      </label>
 
       <label class="flex items-center justify-between gap-6 py-6">
         <span>

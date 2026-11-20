@@ -30,8 +30,7 @@ const plan = computed(() => {
 // 1 · Tess reads the repo; each file she opens shows up as she goes.
 const job = computed(() => s.value?.job)
 const drafting = computed(() => job.value?.kind === 'draft' && job.value.status === 'working')
-const draftFailed = computed(() => job.value?.kind === 'draft' && job.value.status === 'error')
-const finds = computed(() => (job.value?.kind === 'draft' ? job.value.steps ?? [] : []).slice(-6))
+const draftFailed = computed(() => job.value?.kind === 'draft' && ['error', 'cancelled'].includes(job.value.status))
 onMounted(() => { if (step.value === 1 && !drafting.value) setupAction('draft') })
 watch(() => s.value?.profileReady && !drafting.value, (ready) => { if (ready && step.value === 1) go(2) })
 
@@ -145,15 +144,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
             </div>
           </template>
         </TessSays>
-        <TransitionGroup v-if="!draftFailed" name="list" tag="ul" class="ms-12 rounded-2xl bg-[var(--surface)] surface px-5 py-3 flex flex-col" aria-live="polite">
-          <li v-for="(f, i) in finds" :key="f" class="py-1 flex items-baseline gap-2.5">
-            <span :class="['size-1.5 rounded-full shrink-0 -translate-y-0.5', i === finds.length - 1 ? 'bg-[var(--accent)] pulse' : 'bg-[var(--ok)]']" aria-hidden="true" />
-            <span class="truncate">{{ f }}</span>
-          </li>
-          <li v-if="!finds.length" class="py-1 flex items-baseline gap-2.5 text-[var(--muted)]">
-            <span class="size-1.5 rounded-full shrink-0 -translate-y-0.5 bg-[var(--accent)] pulse" aria-hidden="true" />Opening the repo…
-          </li>
-        </TransitionGroup>
+        <div v-if="!draftFailed && job" class="ms-12 rounded-2xl bg-[var(--surface)] surface px-5 py-4"><JobSteps :job="job" @cancel="setupAction('cancel')" /></div>
       </template>
 
       <!-- 2 · Check the plan -->

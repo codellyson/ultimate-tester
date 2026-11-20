@@ -31,6 +31,10 @@ export const VERDICT_SCHEMA = {
           url: { type: 'string' },
           // With linked backends: which app a check exercised ("app", or a backend's name).
           app: { type: 'string' },
+          // Where the check came from: "diff" or "must-never-break", as in plan.json.
+          source: { type: 'string' },
+          // A script the engine can rerun later without Tess (see replay.js), for a check she actually performed.
+          replay: { type: 'string' },
           // Set only on an unverified check that couldn't run because something it needs doesn't exist yet.
           needs: { type: 'string' },
           setupBy: { enum: ['tess', 'person'] },

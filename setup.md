@@ -9,6 +9,7 @@ Rules:
 - Personas you can act as:
 {{PERSONAS}}
   Switch persona by running `{{AS}} <key>` in Bash, then reload the page. If the profile's Test accounts section tells you to create a fresh test account, you may.
+- When creating something needs outside input that makes the app do slow or large work (a website to read, a file to process, a list to import), use the smallest input that works: a one-page site such as `https://example.com`, a tiny file, a list of three. Use the app's page limit or stop button as soon as you have what you need.
 - Name everything you create so it is clearly test data and easy to find again, starting with "UT " (for example "UT B2B vendor").
 - If something already exists, reuse it and say so; do not make duplicates.
 - FIRST write `{{RUN_DIR}}/plan.json` with one entry per item below, using the item as `name`: `[{"name": "...", "why": "which checks need it", "persona": "...", "status": "pending"}]`. Update each entry's status ("running", then "pass" when it exists, "unverified" when you could not create it) and add a short factual `note`.

@@ -59,7 +59,7 @@ const left = computed(() => steps.value.filter((x) => !x.done).length)
             <li v-for="e in s.planErrors.slice(0, 8)" :key="e">{{ e }}</li>
           </ul>
         </div>
-        <TessSays v-else-if="drafting">I'm reading {{ app.name }}: how it starts, what it talks to, who uses it and what they do most.</TessSays>
+        <div v-else-if="drafting" class="rounded-2xl surface px-5 py-4"><JobSteps :job="s.job" @cancel="setupAction('cancel')" /></div>
         <div v-else-if="!s.planErrors?.length" class="rounded-2xl surface px-6 py-6 flex flex-col items-start gap-3">
           <p class="text-[15px] leading-relaxed text-[var(--text-2)] max-w-xl">I don't have a test plan for {{ app.name }} yet. I'll read your repo and draft one: how to start the app, who uses it, and what must never break. You check it before I run anything.</p>
           <button class="btn-blue" @click="draft">Read my repo</button>
@@ -117,7 +117,7 @@ const left = computed(() => steps.value.filter((x) => !x.done).length)
           </div>
         </template>
         <template v-else-if="converting">
-          <TessSays>Turning your plan into JSON and checking it. About a minute.</TessSays>
+          <JobSteps :job="s.job" @cancel="setupAction('cancel')" />
         </template>
         <template v-else>
           <p class="text-[15px] leading-relaxed">This plan is in the old format. I can turn it into a checked JSON plan, so every answer has its place and your team gets the same one from the repo.</p>
