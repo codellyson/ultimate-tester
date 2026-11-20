@@ -54,7 +54,7 @@ async function remove(id: string, title: string) {
         <h2 class="font-[family-name:var(--font-serif)] text-[20px] font-semibold">Tests</h2>
         <div v-if="!state.runs.length" class="rounded-2xl surface px-6 py-7 text-center flex flex-col items-center gap-2">
           <span class="tess size-[22px] rounded-full" aria-hidden="true" />
-          <p class="text-[#333]">I haven't tested anything here yet.<br>Make a change, or start a test above. It usually takes 3 to 10 minutes.</p>
+          <p class="text-[var(--text-2)]">I haven't tested anything here yet.<br>Make a change, or start a test above. It usually takes 3 to 10 minutes.</p>
         </div>
         <ul v-else class="flex flex-col gap-2">
           <li v-for="(r, i) in state.runs" :key="r.id" class="group flex items-center rounded-[10px] hover:bg-[var(--row-hover)]">

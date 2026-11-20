@@ -1,0 +1,14 @@
+{
+  "$schema": "https://ultimate-tester.kreativekorna.com/schema/v1.json",
+  "version": 1,
+  "browser": false,
+  "start": { "command": "PORT={port} npm start", "port": 4580, "readyUrl": "http://localhost:{port}/health", "seed": null },
+  "urls": { "allowed": ["localhost"] },
+  "personas": [{ "key": "client", "who": "An app that saves, lists and deletes notes", "signIn": "none" }],
+  "mustNeverBreak": [
+    { "check": "Ask for the notes list and get back every saved note" },
+    { "check": "Save a note and get back its number, title and creation time" },
+    { "check": "A blank title or broken data is refused and nothing is saved" },
+    { "check": "Delete a note, and get not found for a number that doesn't exist" }
+  ]
+}

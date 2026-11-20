@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { shouldSkip, VERDICT_SCHEMA, enforceEvidence, renderReport, usageLabel, withPort, parsePersonas, recentRuns, withoutOurStopHook, addToSection, parseStart } from '../lib.js';
 const PORT = Number(process.env.ULTIMATE_TESTER_PORT ?? 4600);
 import { startBrowser, freePort, useSession } from '../live.js';
+import { readPlan, addEnvironment, PLAN_FILES } from '../plan.js';
 import { sessionFile } from '../actions.js';
 import { addApp, readSettings } from '../apps.js';
 
@@ -65,12 +66,12 @@ function collectChange(commit, range) {
   const untracked = git('ls-files', '--others', '--exclude-standard').split('\n').filter(Boolean);
   const diff = [git('diff', 'HEAD'), ...untracked.map((f) => `--- new file: ${f}`)].join('\n');
   // Tess's own plan file isn't the person's change.
-  return { mode: 'uncommitted changes', files: [...tracked, ...untracked].filter((f) => f !== PROFILE), diff, message: '(not committed yet)' };
+  return { mode: 'uncommitted changes', files: [...tracked, ...untracked].filter((f) => !PLAN_FILES.includes(f)), diff, message: '(not committed yet)' };
 }
 
 async function runTester(prompt, runDir) {
   // A backend with no pages ("- Browser: not needed" under Start) is tested with requests only: no browser at all.
-  const noBrowser = /^- Browser:\s*not needed/im.test(readFileSync(PROFILE, 'utf8'));
+  const noBrowser = /^- Browser:\s*not needed/im.test(readPlan(root()).text);
   const browser = noBrowser ? null : await startBrowser(runDir);
   const browserArgs = browser ? ['--cdp-endpoint', browser.endpoint] : ['--headless', '--isolated'];
   const mcpFile = join(runDir, 'mcp.json');
@@ -159,7 +160,7 @@ async function openWindow(view = '', alwaysOpen = false) {
 
 // One line per persona for the prompt, saying whether a sign-in is saved.
 function personaLines() {
-  const list = parsePersonas(readFileSync(PROFILE, 'utf8'));
+  const list = parsePersonas(readPlan(root()).text);
   return list.map((p) => {
     const ready = !p.signIn ? 'no sign-in needed' : existsSync(sessionFile(join(process.cwd(), STATE), p.key, list)) ? 'sign-in saved' : 'NOT SET UP (no saved sign-in)';
     return `- ${p.key}: ${p.label} [${ready}]`;
@@ -188,7 +189,7 @@ async function setupEnv(source) {
   writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: 'setup', message: `Set up for: ${title}`, files: [], note: '', kind: 'setup', target: source, source: { id: source, kind: fromChange.kind ?? 'changes', target: fromChange.target ?? null, note: fromChange.note ?? '', checks: wanted.map((f) => f.name) } }));
   const port = await freePort();
   const prompt = readFileSync(join(HOME, 'setup.md'), 'utf8')
-    .replace('{{PROFILE}}', () => withPort(readFileSync(PROFILE, 'utf8'), port))
+    .replace('{{PROFILE}}', () => withPort(readPlan(root()).text, port))
     .replace('{{PERSONAS}}', () => personaLines())
     .replaceAll('{{AS}}', `node ${JSON.stringify(SELF)} as`)
     .replaceAll('{{PORT}}', String(port))
@@ -203,14 +204,13 @@ async function setupEnv(source) {
   try { plan = JSON.parse(readFileSync(join(runDir, 'plan.json'), 'utf8')); } catch {}
   const verdict = enforceEvidence(raw, plan);
   // Keep the recipe: next time Tess (or a person) can recreate the same test data the same way.
-  let md = readFileSync(PROFILE, 'utf8');
-  // Steps are saved with the profile's usual port, not this run's one-off port.
-  const usual = parseStart(md).url?.match(/:(\d+)/)?.[1];
+  // Steps are saved with the plan's usual port, not this run's one-off port.
+  const usual = parseStart(readPlan(root()).text).url?.match(/:(\d+)/)?.[1];
   const fixPort = (t) => (usual ? t.replaceAll(String(port), usual) : t);
-  for (const f of verdict.flows ?? []) {
-    if (f.status === 'pass' && f.steps?.length) md = addToSection(md, 'Environment', fixPort(`${f.name}${f.persona && f.persona !== 'default' ? ` (as ${f.persona})` : ''}: ${f.steps.join('; ')}`));
-  }
-  writeFileSync(PROFILE, md);
+  try {
+    addEnvironment(root(), (verdict.flows ?? []).filter((f) => f.status === 'pass' && f.steps?.length)
+      .map((f) => ({ what: f.name, ...(f.persona && f.persona !== 'default' ? { as: f.persona } : {}), steps: f.steps.map(fixPort) })));
+  } catch (e) { console.error(`Ultimate Tester: ${e.message}`); }
   const usage = usageLabel({ ...billing(), costUsd });
   const report = renderReport(verdict, { runDir, durationS: Math.round((Date.now() - started) / 1000), usage });
   writeFileSync(join(runDir, 'verdict.json'), JSON.stringify({ ...verdict, costUsd, usage, model: MODEL, durationMs: Date.now() - started }, null, 2));
@@ -221,7 +221,9 @@ async function setupEnv(source) {
 // Returns { status, report } — status is pass | fail | unverified | skip.
 async function run({ commit = null, range = null, dedupe = false, note = '' } = {}) {
   process.chdir(root());
-  if (!existsSync(PROFILE)) return { status: 'skip', report: `No ${PROFILE}. Run: ultimate-tester init` };
+  const testPlan = readPlan(root());
+  if (!testPlan.format) return { status: 'skip', report: `No ${PROFILE}. Run: ultimate-tester init` };
+  if (testPlan.errors.length) return { status: 'skip', report: `Ultimate Tester: the test plan has problems, so nothing was tested.\n${testPlan.errors.map((e) => `- ${e}`).join('\n')}` };
   const change = collectChange(commit, range);
   // A release is many changes at once; give it room unless someone set a limit.
   if (range && !process.env.ULTIMATE_TESTER_TIMEOUT_MS) TIMEOUT_MS = Math.max(25, SETTINGS.timeoutMin) * 60_000;
@@ -244,7 +246,7 @@ async function run({ commit = null, range = null, dedupe = false, note = '' } = 
   writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: change.mode, message: change.message, files: change.files, note, kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit ?? null }));
   const port = await freePort();
   const prompt = readFileSync(join(HOME, 'prompt.md'), 'utf8')
-    .replace('{{PROFILE}}', () => withPort(readFileSync(PROFILE, 'utf8'), port))
+    .replace('{{PROFILE}}', () => withPort(readPlan(root()).text, port))
     .replace('{{PERSONAS}}', () => personaLines())
     .replaceAll('{{AS}}', `node ${JSON.stringify(SELF)} as`)
     .replaceAll('{{PORT}}', String(port))
@@ -297,10 +299,10 @@ async function stopHook() {
 
 function init() {
   process.chdir(root());
-  if (!existsSync(PROFILE)) {
+  if (!readPlan(root()).format) {
     writeFileSync(PROFILE, readFileSync(join(HOME, 'profile.template.md'), 'utf8'));
     console.log(`Wrote ${PROFILE}. Fill in Start, Allowed URLs, Test accounts and Must never break.`);
-  } else console.log(`${PROFILE} already exists.`);
+  } else console.log('A test plan already exists.');
   const gi = existsSync('.gitignore') ? readFileSync('.gitignore', 'utf8') : '';
   if (!gi.split('\n').includes(`${STATE}/`)) appendFileSync('.gitignore', `${gi && !gi.endsWith('\n') ? '\n' : ''}${STATE}/\n`);
 }
@@ -379,7 +381,7 @@ switch (cmdName) {
     const endpoint = process.env.ULTIMATE_TESTER_CDP;
     if (!endpoint) { console.error('Only works inside a test run'); process.exit(1); }
     process.chdir(root());
-    const list = parsePersonas(readFileSync(PROFILE, 'utf8'));
+    const list = parsePersonas(readPlan(root()).text);
     const who = list.find((p) => p.key === (rest[0] ?? '').toLowerCase());
     if (!who) { console.error(`No persona "${rest[0]}". Personas: ${list.map((p) => p.key).join(', ')}`); process.exit(1); }
     const file = who.signIn ? sessionFile(join(process.cwd(), STATE), who.key, list) : null;

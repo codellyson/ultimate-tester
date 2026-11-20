@@ -13,6 +13,8 @@ One colour: black on white.
 - Status colour is the one exception, and it lives only in status icons: passed `#1f8a4c` (outline tick), broke `#d1342f` (filled ✕), couldn't run `#999999` (dashed circle). No "passed" / "broke" words beside them; the icon shape and colour carry it, and each icon has an accessible label. Never colour text, rows, backgrounds or buttons by status.
 - Screenshots of the app under test are the only colourful thing on screen, so the evidence stands out.
 
+- **Dark (the default):** the same system inverted. Page `#0b0b0b`, surfaces `#151515`, selected row `#1f1f1f`, lines `#242424`, text `#f5f5f5`, secondary `#a3a3a3`; the strong colour is white (`#f5f5f5` buttons with black text). Status icons brighten to passed `#3fbf72`, broke `#f0605b`. Lifted things get a faint white ring instead of a grey shadow. Appearance is Dark, Light or Same as Mac in Settings, and a sun/moon button in the title bar switches dark and light in one click.
+
 Rejected: tinted palettes (paper and yellow, dark Tess green, graphite and blue, clay and sage).
 
 ## 2. Typography (locked)
@@ -142,4 +144,5 @@ Built only from the answers above. No one-off variants.
 - **Empty state:** 16px card with a hairline, orb, one or two lines in Tess's voice, one primary button.
 - **Confirm sheet:** replaces every browser popup. 18px radius, lifted shadow, Newsreader 17 question, one grey line, Cancel (secondary) and the action (primary) on the right.
 - **Menu:** 14px radius, lifted shadow, 6px padding, 2px between items, 16px icons, shortcuts right-aligned in grey, hairline separators.
+- **API checks:** a check made with requests shows them in the screenshot's place, in one lifted card. When a request proves a failure, the card opens with "Expected" beside "Came back · 201 Created" (red ring on Came back, filled ✕), one line per top-level field, and the fields that differ marked with a `#fde2e1` highlight and semibold text. This highlight is the one exception to "colour only in status icons": it marks the proof, never decoration. Tess's one-line note sits under the pair. Below, "How I got there · N requests" with Show/Hide unfolds the requests as numbered steps (black 20px badge, method in a `#f3f3f3` tag, path, Copy as curl), each with what was sent, the status in a black pill plus its word ("Created") and time in ms, and the body in a `#fafafa` box. A check with no failing request shows the steps open.
 - **Toast:** black pill, white text and icon, bottom centre, 2 seconds. Only for things that happened off screen ("Report copied").

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { PhHouse, PhPlus, PhClockCounterClockwise } from '@phosphor-icons/vue'
+import { PhHouse, PhPlus, PhClockCounterClockwise, PhMoon, PhSun } from '@phosphor-icons/vue'
 // One bar: Home / app / test (the test is a menu), connection trouble, New test and ⌘K.
 const { state, openRun, startTest, addApp, show, tauri } = useTester()
 const app = computed(() => state.apps.find((a) => a.id === state.appId))
+// One click between dark and light; Settings also offers "Same as Mac".
+const look = useAppearance()
+const isDark = computed(() => look.mode.value === 'dark' || (look.mode.value === 'system' && document.documentElement.dataset.theme === 'dark'))
 const run = computed(() => state.runs.find((r) => r.id === state.runId))
 const runBtn = ref<HTMLElement>()
 const newBtn = ref<HTMLElement>()
@@ -96,5 +99,6 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
         <textarea v-model="state.note" maxlength="1000" rows="2" class="field mt-1.5 resize-none" placeholder="e.g. Focus on checkout with a discount code" @keydown.meta.enter.prevent="!disabledNew && startTest({ kind: 'changes' })" />
       </label>
     </div></Transition>
+      <button class="shrink-0 size-7 rounded-full ring-1 ring-inset ring-[var(--line-strong)] text-[var(--muted)] grid place-items-center hover:bg-[var(--surface-hover)] hover:text-[var(--ink)]" :aria-label="isDark ? 'Switch to light' : 'Switch to dark'" :title="isDark ? 'Switch to light' : 'Switch to dark'" @click="look.set(isDark ? 'light' : 'dark')"><component :is="isDark ? PhSun : PhMoon" class="size-4" aria-hidden="true" /></button>
   </header>
 </template>

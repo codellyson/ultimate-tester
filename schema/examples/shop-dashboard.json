@@ -1,0 +1,37 @@
+{
+  "$schema": "https://ultimate-tester.kreativekorna.com/schema/v1.json",
+  "version": 1,
+  "browser": true,
+  "start": {
+    "command": "npx next dev --turbopack -p {port}",
+    "port": 3012,
+    "readyUrl": "http://localhost:{port}",
+    "readySeconds": 120,
+    "seed": null
+  },
+  "urls": {
+    "allowed": ["*.dev.example.com"],
+    "never": ["*.example.com", "*.example.store", "*.example.site"]
+  },
+  "neverRun": ["pnpm cf:deploy", "npm run cf:deploy", "git push", "git merge"],
+  "personas": [
+    { "key": "owner", "who": "Store owner of the dev test store", "signIn": "saved" },
+    { "key": "b2b-owner", "who": "Store owner with B2B turned on", "signIn": "saved" },
+    { "key": "marketing-manager", "who": "Staff member with the Marketing Manager role", "signIn": "saved" },
+    { "key": "new-merchant", "who": "Account created today, store not set up yet", "signIn": "saved" },
+    { "key": "shopper", "who": "Guest shopper on the test store's dev storefront", "signIn": "none" }
+  ],
+  "mustNeverBreak": [
+    { "check": "Sign in and land on the store dashboard", "as": "owner" },
+    { "check": "Add a product and see it on the storefront", "as": "owner" },
+    { "check": "Create and send an invoice", "as": "owner", "startAt": "/invoices" },
+    { "check": "Check out on the dev storefront, stopping before payment", "as": "shopper" }
+  ],
+  "backends": [
+    { "name": "core-api", "repo": "github.com/acme/orders-api", "env": "NEXT_PUBLIC_CORE_API_URL", "whenMissing": "dev" },
+    { "name": "api", "repo": "github.com/acme/main-api", "env": "NEXT_PUBLIC_API_URL", "whenMissing": "dev" }
+  ],
+  "notes": ["Never send emails or payments to real people: stop at the final send or pay button and say what was not submitted."],
+  "lessons": [],
+  "environment": []
+}

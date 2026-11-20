@@ -4,8 +4,9 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseStart, withPort, parsePersonas, addToSection, setSection, shouldSkip } from './lib.js';
+import { parseStart, withPort, parsePersonas, shouldSkip } from './lib.js';
 import { signInWindow, freePort } from './live.js';
+import { readPlan, addLesson as planLesson, setNotes as planNotes, PLAN_FILES } from './plan.js';
 
 // UT_HOME is set by `ultimate-tester serve`; once Nitro bundles this file, import.meta.url no longer points at the repo.
 const HOME = process.env.UT_HOME ?? dirname(fileURLToPath(import.meta.url));
@@ -35,7 +36,7 @@ export function sessionFile(state, key, personas) {
 export function createActions(root) {
   const state = join(root, '.ultimate-tester');
   const profileFile = join(root, '.ultimate-tester.md');
-  const personasNow = () => parsePersonas(existsSync(profileFile) ? readFileSync(profileFile, 'utf8') : '');
+  const personasNow = () => parsePersonas(readPlan(root).text);
   // One thing at a time per repo; the window polls `job` to show progress.
   let job = { kind: null, status: 'idle', message: '', steps: [] };
   let signIn = null; // { win, app }
@@ -78,12 +79,13 @@ export function createActions(root) {
   // Uncommitted files except Tess's own plan; null in a repo with no commit yet (no HEAD to compare with).
   const changedFiles = () => {
     const git = (...a) => execFileSync('git', a, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean);
-    try { return [...git('diff', 'HEAD', '--name-only'), ...git('ls-files', '--others', '--exclude-standard')].filter((f) => f !== '.ultimate-tester.md'); } catch { return null; }
+    try { return [...git('diff', 'HEAD', '--name-only'), ...git('ls-files', '--others', '--exclude-standard')].filter((f) => !PLAN_FILES.includes(f)); } catch { return null; }
   };
 
   return {
     status() {
-      const profile = existsSync(profileFile) ? readFileSync(profileFile, 'utf8') : '';
+      const plan = readPlan(root);
+      const profile = plan.text;
       const list = parsePersonas(profile);
       const personas = list.map((p) => {
         let savedAt = null;
@@ -94,6 +96,9 @@ export function createActions(root) {
       return {
         profile,
         profileReady,
+        // Which file holds the plan, and what's wrong with it if it fails its schema (then nothing is tested).
+        planFormat: plan.format,
+        planErrors: plan.errors,
         // Which version of the profile this page is showing; a save based on an older one is refused.
         profileHash: createHash('sha1').update(profile).digest('hex'),
         // Set up only once the person finishes getting started; a drafted plan alone is not checked yet.
@@ -117,6 +122,8 @@ export function createActions(root) {
     // window), the save is refused instead of quietly overwriting it.
     saveProfile(text, base) {
       if (typeof text !== 'string' || !text.trim() || text.length > 100_000) throw new Error('Profile is empty or too long');
+      // shortcut: a JSON plan is edited in its file for now; editing it from the plan card comes with the JSON plan card.
+      if (readPlan(root).format === 'json') throw new Error('This plan is .ultimate-tester.json. Edit that file for now; the plan card will edit it soon.');
       const now = existsSync(profileFile) ? readFileSync(profileFile, 'utf8') : '';
       if (base && base !== createHash('sha1').update(now).digest('hex')) {
         throw new Error('The profile changed while you were editing (something Tess learned, or another window). Showing the latest; make your edit again.');
@@ -170,7 +177,7 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
       const who = personasNow().find((p) => p.key === persona && p.signIn);
       if (!who) return set('signin', 'error', 'Choose a persona from the profile that signs in');
       // Its own port, never a server someone else is running; cookies on localhost carry across ports.
-      const { command, url } = parseStart(withPort(existsSync(profileFile) ? readFileSync(profileFile, 'utf8') : '', await freePort()));
+      const { command, url } = parseStart(withPort(readPlan(root).text, await freePort()));
       if (!command || !url) return set('signin', 'error', 'The profile needs a start command and a localhost URL under Start');
       set('signin', 'working', `Starting your app to sign in as ${who.label}…`);
       let app = null;
@@ -203,10 +210,9 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
     // "Always keep in mind": the profile's Notes for Tess section.
     setNotes(text) {
       if (typeof text !== 'string' || text.length > 5000) throw new Error('Notes are too long');
-      if (!existsSync(profileFile)) throw new Error('Set up the profile first');
-      const body = text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => (l.startsWith('-') ? l : `- ${l}`)).join('\n');
-      // Empty means "no notes": the section goes back to its placeholder rather than keeping the old ones.
-      writeFileSync(profileFile, setSection(readFileSync(profileFile, 'utf8'), 'Notes for Tess', body || "- (anything Tess should always know: areas to focus on, things to skip, known quirks)"));
+      if (!readPlan(root).format) throw new Error('Set up the profile first');
+      // Empty means "no notes".
+      planNotes(root, text.split('\n').map((l) => l.trim().replace(/^-\s*/, '')).filter(Boolean));
     },
 
     // mode: "stop" (when Claude Code finishes), "commit" (after every commit) or "manual".
@@ -235,9 +241,8 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
       const clean = (v) => String(v ?? '').replace(/\s+/g, ' ').trim();
       const t = clean(text);
       if (!t || t.length > 500) throw new Error('Say in a sentence what Tess should know (up to 500 characters)');
-      if (!existsSync(profileFile)) throw new Error('Set up the profile first');
-      const c = clean(check).slice(0, 120);
-      writeFileSync(profileFile, addToSection(readFileSync(profileFile, 'utf8'), 'Lessons', c ? `${c}: ${t}` : t));
+      if (!readPlan(root).format) throw new Error('Set up the profile first');
+      planLesson(root, t, clean(check).slice(0, 120));
     },
 
     // Stops the test started from this window: the whole process group (Tess, her browser, the app she started).

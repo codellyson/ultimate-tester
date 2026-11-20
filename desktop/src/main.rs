@@ -181,7 +181,7 @@ fn set_menu_state(app: tauri::AppHandle, new_test: bool, rerun: bool, stop: bool
 fn build_settings(app: &tauri::AppHandle) -> tauri::Result<()> {
     tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("index.html?view=setup&window=settings".into()))
         .title("Settings")
-        .theme(Some(tauri::Theme::Light))
+        .theme(Some(tauri::Theme::Dark))
         .inner_size(820.0, 720.0)
         .min_inner_size(640.0, 480.0)
         .title_bar_style(tauri::TitleBarStyle::Overlay)

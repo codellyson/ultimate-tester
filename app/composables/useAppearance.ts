@@ -4,17 +4,18 @@ export type Appearance = 'dark' | 'light' | 'system'
 const KEY = 'ut-appearance'
 
 function read(): Appearance {
-  return 'light' // DESIGN.md: one light palette for now; dark mode comes later
+  try { const v = localStorage.getItem(KEY); if (v === 'light' || v === 'dark' || v === 'system') return v } catch {}
+  return 'dark'
 }
+const macDark = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null
 
 const mode = ref<Appearance>(read())
 
 // data-theme switches every Passalong token (color-scheme on the root); the native window follows too,
 // so the title bar and traffic lights match.
 export function applyAppearance(m: Appearance) {
-  const root = document.documentElement
-  if (m === 'system') delete root.dataset.theme
-  else root.dataset.theme = m
+  // "Same as Mac" still sets a theme, from the Mac's current one, so the tokens never fall back to light by accident.
+  document.documentElement.dataset.theme = m === 'system' ? (macDark?.matches ? 'dark' : 'light') : m
   tauri()?.window?.getCurrentWindow().setTheme?.(m === 'system' ? null : m).catch(() => {})
 }
 
@@ -30,4 +31,5 @@ export function useAppearance() {
 export function watchAppearance() {
   applyAppearance(mode.value)
   addEventListener('storage', (e: StorageEvent) => { if (e.key === KEY) { mode.value = read(); applyAppearance(mode.value) } })
+  macDark?.addEventListener('change', () => { if (mode.value === 'system') applyAppearance('system') })
 }

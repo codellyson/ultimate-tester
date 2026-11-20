@@ -83,7 +83,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
             :aria-current="i === step ? 'step' : undefined" :aria-label="canGoBack(i) ? `Back to ${name}` : undefined"
             @click="canGoBack(i) && go(i)"
           >
-            <b :class="['transition-colors duration-200 size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ink)] text-white' : i === step ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] ring-1 ring-[var(--line)]']"><CheckIcon v-if="i < step" class="size-3" aria-hidden="true" /><template v-else>{{ i + 1 }}</template></b>
+            <b :class="['transition-colors duration-200 size-[18px] rounded-full grid place-items-center text-[11px] font-semibold', i < step ? 'bg-[var(--ink)] text-[var(--page)]' : i === step ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] ring-1 ring-[var(--line)]']"><CheckIcon v-if="i < step" class="size-3" aria-hidden="true" /><template v-else>{{ i + 1 }}</template></b>
             <span class="hidden md:inline">{{ name }}</span>
           </component>
         </li>
@@ -110,8 +110,8 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
             <li class="px-4 py-2.5 flex items-start gap-2">
               <span :class="['mt-[3px] shrink-0', pre.claude.ok ? 'text-[var(--ok)]' : 'text-[var(--bad)]']" aria-hidden="true"><component :is="pre.claude.ok ? CheckCircleIcon : XCircleIcon" class="size-4" /></span>
               <span v-if="pre.claude.ok">Claude Code is signed in</span>
-              <span v-else-if="pre.claude.installed === false" class="selectable">Claude Code isn't installed. I run on it. In Terminal, run <code class="rounded-md bg-[#f3f3f3] px-1.5 py-0.5 text-[12.5px]">npm install -g @anthropic-ai/claude-code</code>, then <code class="rounded-md bg-[#f3f3f3] px-1.5 py-0.5 text-[12.5px]">claude</code> to sign in, and come back.</span>
-              <span v-else class="selectable">Claude Code isn't signed in. In Terminal, run <code class="rounded-md bg-[#f3f3f3] px-1.5 py-0.5 text-[12.5px]">claude</code> and sign in, then come back.</span>
+              <span v-else-if="pre.claude.installed === false" class="selectable">Claude Code isn't installed. I run on it. In Terminal, run <code class="rounded-md bg-[var(--code)] px-1.5 py-0.5 text-[12.5px]">npm install -g @anthropic-ai/claude-code</code>, then <code class="rounded-md bg-[var(--code)] px-1.5 py-0.5 text-[12.5px]">claude</code> to sign in, and come back.</span>
+              <span v-else class="selectable">Claude Code isn't signed in. In Terminal, run <code class="rounded-md bg-[var(--code)] px-1.5 py-0.5 text-[12.5px]">claude</code> and sign in, then come back.</span>
               <span v-if="plan" class="text-[11px] rounded-full bg-[var(--sand)] text-[var(--muted)] px-2 py-0.5">{{ plan }}</span>
             </li>
             <li class="px-4 py-2.5 flex items-start gap-2">

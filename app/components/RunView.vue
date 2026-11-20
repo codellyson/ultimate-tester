@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PhArrowClockwise, PhArrowRight, PhCopy, PhGlobeSimple, PhStop, PhXCircle, PhCircleDashed } from '@phosphor-icons/vue'
 // A test: the verdict first, then what Tess saw (driven by the selected check), Tess's words, and the checks.
-import type { PlanItem, Persona } from '~/composables/useTester'
+import type { PlanItem, Persona, Req } from '~/composables/useTester'
 const { state, openSettings, rerun, stopTest, startTest, tauri } = useTester()
 const r = computed(() => state.detail!)
 const v = computed(() => r.value.verdict)
@@ -174,6 +174,12 @@ const textEvidence = computed(() => (finished.value ? (selFlow.value?.evidence ?
   const res = got.match(/^(\d{3})\b[;:]?\s*(.*)$/s)
   return { method: req[1]!.toUpperCase(), path: req[2]!, sent: pretty(req[3]!.trim()), code: res?.[1] ?? '', body: pretty((res ? res[2]! : got).trim()) }
 }) : []))
+// Requests behind the selected check: Tess's own list when she gave one, else read from her evidence lines (older runs).
+const reqs = computed<Req[]>(() => selFlow.value?.requests?.length ? selFlow.value.requests
+  : textEvidence.value.filter((e) => 'method' in e).map((e) => ({ method: e.method!, path: e.path!, sent: e.sent || undefined, status: Number(e.code) || 0, got: e.body || undefined })))
+const rawEvidence = computed(() => textEvidence.value.filter((e) => !('method' in e)))
+const reqProof = computed(() => reqs.value.some((r) => r.expected))
+const apiBase = computed(() => state.setup?.start?.url?.match(/^https?:\/\/[^/]+/)?.[0] ?? null)
 // The selected check's result in words, and for one that didn't run, who I'd need to sign in as.
 const selStatus = computed(() => (finished.value && selItem.value ? statusOf(selItem.value.status) : null))
 const selBlocker = computed(() => (selItem.value?.status === 'unverified' ? blockedBy(selItem.value) : null))
@@ -183,11 +189,11 @@ const screen = computed(() => {
     const shot = mine.value[Math.min(state.sel.shot, mine.value.length - 1)]
     return shot
       ? { src: shotUrl(shot), file: shot, alt: `Evidence for: ${what.value}`, label: `Evidence · ${what.value}${mine.value.length > 1 ? ` · ${state.sel.shot + 1} of ${mine.value.length} (← →)` : ''}` }
-      : { src: null, empty: textEvidence.value.length ? '' : selItem.value?.status === 'unverified' ? "This check didn't run, so there's no screenshot." : "I didn't take a screenshot for this one.", label: `Evidence · ${what.value}` }
+      : { src: null, empty: (textEvidence.value.length || selFlow.value?.requests?.length) ? '' : selItem.value?.status === 'unverified' ? "This check didn't run, so there's no screenshot." : "I didn't take a screenshot for this one.", label: `Evidence · ${what.value}` }
   }
   // A browser that never left about:blank is not evidence of anything.
   if (r.value.live && r.value.live.url !== 'about:blank') return { src: `/api/apps/${state.appId}/shots/${r.value.id}/live.jpg?t=${liveTick.value}`, alt: 'Your app, live, as I test it', label: `${live.value ? 'Live' : 'Last screen'} · ${r.value.live.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
-  return { src: null, empty: live.value ? (isSetup.value ? "I'm starting your app. You'll see it here once it's open." : /^- Browser:\s*not needed/im.test(state.setup?.profile ?? '') ? "I'm testing this one by sending it requests. What I send and get back shows on each check." : "I'm reading what you changed. You'll see your app here once I open it.") : (r.value.status === 'stopped' ? 'The test stopped before I took a screenshot.' : r.value.live ? "I couldn't reach your app, so there's nothing to show. My note on the checks says why." : textEvidence.value.length ? '' : "There's no screenshot for this test."), label: live.value ? '' : 'No screen' }
+  return { src: null, empty: live.value ? (isSetup.value ? "I'm starting your app. You'll see it here once it's open." : /^- Browser:\s*not needed/im.test(state.setup?.profile ?? '') ? "I'm testing this one by sending it requests. What I send and get back shows on each check." : "I'm reading what you changed. You'll see your app here once I open it.") : (r.value.status === 'stopped' ? 'The test stopped before I took a screenshot.' : r.value.live ? "I couldn't reach your app, so there's nothing to show. My note on the checks says why." : (textEvidence.value.length || selFlow.value?.requests?.length) ? '' : "There's no screenshot for this test."), label: live.value ? '' : 'No screen' }
 })
 
 // Evidence up close: click or Space for full size; drag it out; right-click to copy or find the file.
@@ -319,7 +325,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
       <div class="flex-1 min-w-[320px]">
         <p class="sr-only" role="status">{{ finished && v ? `${verdict.lead}${verdict.em}` : '' }}</p>
         <div class="flex items-center gap-2.5 text-[12.5px] text-[var(--muted)] tabular-nums">
-          <span :class="['pill', { 'bg-[var(--ink)] text-white': pill.kind === 'done' || pill.kind === 'fail', 'ring-1 ring-inset ring-[var(--line-strong)] text-[var(--ink)]': pill.kind === 'live' || pill.kind === 'unk', 'bg-[var(--code)] text-[var(--muted)]': pill.kind === 'stopped' }]">
+          <span :class="['pill', { 'bg-[var(--ink)] text-[var(--page)]': pill.kind === 'done' || pill.kind === 'fail', 'ring-1 ring-inset ring-[var(--line-strong)] text-[var(--ink)]': pill.kind === 'live' || pill.kind === 'unk', 'bg-[var(--code)] text-[var(--muted)]': pill.kind === 'stopped' }]">
             <span v-if="pill.kind === 'live'" class="tess size-3 rounded-full breathe" aria-hidden="true" />
             <PhXCircle v-else-if="pill.kind === 'fail'" weight="fill" class="size-[13px] text-[#ff8a80]" aria-hidden="true" />
             <PhCircleDashed v-else-if="pill.kind === 'unk'" class="size-[13px] text-[var(--faint)]" aria-hidden="true" />
@@ -333,7 +339,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
         <div class="mt-5 max-w-[46em] flex gap-3" aria-live="polite">
           <span :class="['tess size-[22px] rounded-full shrink-0 mt-0.5', live && 'breathe']" aria-hidden="true" />
           <div class="min-w-0">
-            <p :key="bubble" ref="sumEl" :class="['selectable rise text-[15px] leading-[1.6] text-[#333] text-pretty', !sumOpen && 'line-clamp-2']"><span class="sr-only">Tess: </span>{{ bubble }}</p>
+            <p :key="bubble" ref="sumEl" :class="['selectable rise text-[15px] leading-[1.6] text-[var(--text-2)] text-pretty', !sumOpen && 'line-clamp-2']"><span class="sr-only">Tess: </span>{{ bubble }}</p>
             <button v-if="sumLong" class="mt-1 text-[12.5px] font-medium text-[var(--muted)] hover:text-[var(--ink)]" :aria-expanded="sumOpen" @click="sumOpen = !sumOpen">{{ sumOpen ? 'Less' : 'More' }}</button>
             <p v-if="r.change?.note" class="mt-1.5 text-[12.5px] text-[var(--muted)]">Your note: <span class="text-[var(--ink)]">{{ r.change.note }}</span></p>
           </div>
@@ -410,20 +416,13 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
         </div>
         <!-- The screenshot as a card: the whole page, lifted; crossfades between checks. -->
         <Transition v-else name="fade" mode="out-in">
-          <figure v-if="screen.src" :key="live ? 'live' : screen.src" class="m-0 rounded-2xl overflow-hidden lifted bg-white shrink-0">
+          <figure v-if="screen.src" :key="live ? 'live' : screen.src" class="m-0 rounded-2xl overflow-hidden lifted bg-[var(--surface)] shrink-0">
             <img :src="screen.src" :alt="screen.alt" draggable="true" class="block w-full h-auto cursor-zoom-in" title="Click or press Space to enlarge" @click="zoomed = true" @contextmenu="evidenceMenu">
           </figure>
           <!-- No screenshot, but requests: they are the evidence, shown in the screenshot's place. -->
-          <div v-else-if="!live && textEvidence.length && !startFail" key="requests" class="rounded-2xl lifted bg-white overflow-hidden divide-y divide-[var(--line)] shrink-0 selectable">
-            <div v-for="(e, i) in textEvidence" :key="i" class="px-5 py-4 flex flex-col gap-2 text-[13px] leading-[1.55]">
-              <template v-if="'method' in e">
-                <p class="flex items-baseline gap-2 min-w-0"><span class="shrink-0 rounded-md bg-[#f3f3f3] px-1.5 py-0.5 text-[11.5px] font-semibold tracking-wide">{{ e.method }}</span><span class="font-medium break-all">{{ e.path }}</span></p>
-                <pre v-if="e.sent" class="m-0 font-[inherit] whitespace-pre-wrap break-words text-[#444]">{{ e.sent }}</pre>
-                <p class="flex items-baseline gap-2"><span v-if="e.code" class="shrink-0 rounded-full bg-black text-white px-2 py-0.5 text-[11.5px] font-semibold tabular-nums">{{ e.code }}</span><span v-else class="text-[var(--muted)]">→</span></p>
-                <pre v-if="e.body" class="m-0 font-[inherit] whitespace-pre-wrap break-words rounded-[10px] bg-[#fafafa] px-3 py-2 text-[#333] max-h-64 overflow-auto">{{ e.body }}</pre>
-              </template>
-              <pre v-else class="m-0 font-[inherit] whitespace-pre-wrap break-words text-[#333]">{{ e.raw }}</pre>
-            </div>
+          <ApiEvidence v-else-if="!live && reqs.length && !startFail" key="requests" :reqs="reqs" :note="reqProof ? saw : ''" :base="apiBase" />
+          <div v-else-if="!live && rawEvidence.length && !startFail" key="raw" class="rounded-2xl lifted bg-[var(--surface)] overflow-hidden divide-y divide-[var(--line)] shrink-0 selectable">
+            <pre v-for="(e, i) in rawEvidence" :key="i" class="m-0 px-5 py-4 font-[inherit] text-[13px] leading-[1.55] whitespace-pre-wrap break-words text-[var(--text-2)]">{{ e.raw }}</pre>
           </div>
           <p v-else-if="screen.empty" key="empty" class="rounded-2xl surface px-6 py-10 text-center text-[var(--muted)] text-pretty">{{ screen.empty }}</p>
         </Transition>
@@ -432,9 +431,9 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           <p class="flex-1 text-[14px] leading-[1.55]">I need to sign in as <b class="font-semibold">{{ selBlocker.label.split(/[;,(]| who | that /)[0]!.trim() }}</b> before I can check this.</p>
           <button class="btn-blue shrink-0" @click="openSettings()">Sign in</button>
         </div>
-        <p v-else-if="!live && saw && !startFail" class="selectable text-[14px] leading-[1.55] text-[#333] text-pretty"><b class="font-semibold text-[var(--ink)]">{{ selItem?.status === 'unverified' ? "Why it didn't run:" : 'What I saw:' }}</b> {{ saw }}</p>
+        <p v-else-if="!live && saw && !startFail && !reqProof" class="selectable text-[14px] leading-[1.55] text-[var(--text-2)] text-pretty"><b class="font-semibold text-[var(--ink)]">{{ selItem?.status === 'unverified' ? "Why it didn't run:" : 'What I saw:' }}</b> {{ saw }}</p>
         <template v-if="!live && selFlow && selFlow.status !== 'pass'">
-          <p v-if="selFlow.expected" class="selectable text-[13px] text-[var(--muted)]">Expected: {{ selFlow.expected }}</p>
+          <p v-if="selFlow.expected && !reqProof" class="selectable text-[13px] text-[var(--muted)]">Expected: {{ selFlow.expected }}</p>
         </template>
       </main>
     </div>

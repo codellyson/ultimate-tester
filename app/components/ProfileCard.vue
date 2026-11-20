@@ -2,6 +2,8 @@
 // The profile Markdown as a readable card: one row per section, each editable in place.
 const props = defineProps<{ profile: string, basic?: boolean }>()
 const { state, setupAction } = useTester()
+// A JSON plan is read here and edited in its file for now (the card writes Markdown plans only).
+const isJson = computed(() => state.setup?.planFormat === 'json')
 const LABELS: [string, string][] = [['Start', 'Starting your app'], ['Allowed URLs', 'Pages I may open'], ['Test accounts', 'Signing in'], ['Personas', 'Who I test as'], ['Must never break', 'Must always work'], ['Existing checks', 'Your own tests'], ['Notes for Tess', 'Notes for me'], ['Lessons', 'Corrections']]
 // The file stays in the terse form Tess reads; the card says the same thing in plain words.
 function plain(head: string, line: string) {
@@ -86,16 +88,16 @@ watch(draft, () => { escArmed.value = false })
           <p v-for="(bits, i) in row.lines" v-else :key="i" :class="row.head === 'Must never break' && 'flex gap-2'">
             <span v-if="row.head === 'Must never break'" class="size-1.5 rounded-full bg-[var(--muted)] shrink-0 mt-[7px]" aria-hidden="true" />
             <span class="min-w-0"><template v-for="(bit, j) in bits" :key="j">
-              <code v-if="bit.startsWith('`')" class="text-[12.5px] rounded-md bg-[#f3f3f3] px-1.5 py-0.5">{{ bit.slice(1, -1) }}</code>
+              <code v-if="bit.startsWith('`')" class="text-[12.5px] rounded-md bg-[var(--code)] px-1.5 py-0.5">{{ bit.slice(1, -1) }}</code>
               <template v-else>{{ bit }}</template>
             </template></span>
           </p>
         </div>
-        <button v-if="editing === null" class="link-quiet text-[12px] self-start shrink-0" :aria-label="`Edit ${row.label}`" @click="edit(row.head)">{{ row.head in sections ? 'Edit' : 'Add' }}</button>
+        <button v-if="editing === null && !isJson" class="link-quiet text-[12px] self-start shrink-0" :aria-label="`Edit ${row.label}`" @click="edit(row.head)">{{ row.head in sections ? 'Edit' : 'Add' }}</button>
       </div>
       <div class="px-5 py-3 text-[12px] text-[var(--muted)] flex gap-3">
-        <span>Saved as .ultimate-tester.md in the repo</span>
-        <button v-if="editing === null" class="link-quiet ms-auto" @click="edit('*')">Open as Markdown</button>
+        <span>Saved as {{ isJson ? '.ultimate-tester.json' : '.ultimate-tester.md' }} in the repo{{ isJson ? '. Edit that file to change it.' : '' }}</span>
+        <button v-if="editing === null && !isJson" class="link-quiet ms-auto" @click="edit('*')">Open as Markdown</button>
       </div>
     </template>
   </div>

@@ -8,7 +8,15 @@ const LIMITS = [8, 12, 20, 30, 45]
 <template>
   <section class="flex-1 min-w-0 min-h-0 overflow-y-auto">
     <div class="max-w-3xl mx-auto px-10 py-10 flex flex-col divide-y divide-[var(--line)]">
-      <label class="flex items-center justify-between gap-6 pb-6">
+      <div class="flex items-center justify-between gap-6 pb-6">
+        <div>
+          <h2 class="font-medium">Appearance</h2>
+          <p class="text-[12px] text-[var(--muted)]">Dark, light, or the same as your Mac.</p>
+        </div>
+        <AppearancePicker />
+      </div>
+
+      <label class="flex items-center justify-between gap-6 py-6">
         <span>
           <span class="block font-medium">Notifications</span>
           <span class="block text-[12px] text-[var(--muted)]">A notification when a test finishes while you're in another app. The Dock badge shows either way.</span>

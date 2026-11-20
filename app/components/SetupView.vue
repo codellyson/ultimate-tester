@@ -47,9 +47,15 @@ const left = computed(() => steps.value.filter((x) => !x.done).length)
       </div>
 
       <template v-if="!s.profileReady || drafting">
-        <TessSays v-if="drafting">I'm reading {{ app.name }}: how it starts, what it talks to, who uses it and what they do most.</TessSays>
-        <div v-else class="rounded-2xl surface px-6 py-6 flex flex-col items-start gap-3">
-          <p class="text-[15px] leading-relaxed text-[#333] max-w-xl">I don't have a test plan for {{ app.name }} yet. I'll read your repo and draft one: how to start the app, who uses it, and what must never break. You check it before I run anything.</p>
+        <div v-if="s.planErrors?.length && !drafting" class="rounded-2xl surface px-6 py-5 flex flex-col gap-2">
+          <p class="text-[15px] leading-relaxed">The test plan in <code class="rounded-md bg-[var(--code)] px-1.5 py-0.5 text-[12.5px]">.ultimate-tester.json</code> has {{ s.planErrors.length === 1 ? 'a problem' : `${s.planErrors.length} problems` }}, so I won't test until {{ s.planErrors.length === 1 ? "it's" : "they're" }} fixed.</p>
+          <ul class="selectable text-[13px] text-[var(--text-2)] list-disc ps-5">
+            <li v-for="e in s.planErrors.slice(0, 8)" :key="e">{{ e }}</li>
+          </ul>
+        </div>
+        <TessSays v-else-if="drafting">I'm reading {{ app.name }}: how it starts, what it talks to, who uses it and what they do most.</TessSays>
+        <div v-else-if="!s.planErrors?.length" class="rounded-2xl surface px-6 py-6 flex flex-col items-start gap-3">
+          <p class="text-[15px] leading-relaxed text-[var(--text-2)] max-w-xl">I don't have a test plan for {{ app.name }} yet. I'll read your repo and draft one: how to start the app, who uses it, and what must never break. You check it before I run anything.</p>
           <button class="btn-blue" @click="draft">Read my repo</button>
           <p v-if="s.job.kind === 'draft' && s.job.status === 'error'" class="text-[13px] text-[var(--muted)]">{{ s.job.message }}</p>
         </div>

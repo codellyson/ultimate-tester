@@ -32,6 +32,24 @@ export const VERDICT_SCHEMA = {
           // Set only on an unverified check that couldn't run because something it needs doesn't exist yet.
           needs: { type: 'string' },
           setupBy: { enum: ['tess', 'person'] },
+          // A check made with requests: each one, in order, so the app can show what was sent and what came back.
+          requests: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['method', 'path', 'status'],
+              properties: {
+                method: { type: 'string' },
+                path: { type: 'string' },
+                sent: { type: 'string' },
+                status: { type: 'integer' },
+                ms: { type: 'number' },
+                got: { type: 'string' },
+                // On the request that proves a failure: the body that should have come back.
+                expected: { type: 'string' },
+              },
+            },
+          },
         },
       },
     },

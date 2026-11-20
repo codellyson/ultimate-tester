@@ -1,0 +1,31 @@
+{
+  "$schema": "https://ultimate-tester.kreativekorna.com/schema/v1.json",
+  "version": 1,
+  "browser": true,
+  "start": {
+    "command": "pnpm --filter @passalong/web exec nuxt dev --port {port}",
+    "port": 3004,
+    "readyUrl": "http://localhost:{port}",
+    "readySeconds": 90,
+    "env": { "PASSALONG_FOLDER_FIXTURE": "0" },
+    "seed": { "command": "pnpm exec wrangler d1 migrations apply passalong --local", "cwd": "apps/web" }
+  },
+  "urls": {
+    "allowed": ["localhost"],
+    "never": ["*.kreativekorna.com", "*.workers.dev"]
+  },
+  "neverRun": ["wrangler dev --remote", "wrangler deploy", "git push"],
+  "personas": [
+    { "key": "member", "who": "Someone who signs up and makes guides", "signIn": "signUp", "signUp": { "url": "/hub", "email": "ut-{time}@example.test" } }
+  ],
+  "mustNeverBreak": [
+    { "check": "The landing page loads with no console errors", "startAt": "/" },
+    { "check": "Sign up, sign out, and sign in again", "as": "member", "startAt": "/hub" },
+    { "check": "Create a guide and see it in the hub after a reload", "as": "member", "startAt": "/hub" },
+    { "check": "Open a guide's share link in a fresh page and see it" }
+  ],
+  "ownTests": { "command": "node --test {file}" },
+  "notes": [],
+  "lessons": [],
+  "environment": []
+}

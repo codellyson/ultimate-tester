@@ -4,4 +4,4 @@ set -e
 cd "$(dirname "$0")/.."
 npm run build
 rm -rf desktop/engine && mkdir -p desktop/engine
-cp -R bin lib.js actions.js apps.js live.js prompt.md profile.template.md package.json sample-app own-build .output desktop/engine/
+cp -R bin lib.js plan.js actions.js apps.js live.js prompt.md profile.template.md package.json sample-app own-build schema .output desktop/engine/
