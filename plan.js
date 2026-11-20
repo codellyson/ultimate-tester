@@ -9,7 +9,7 @@ import { addToSection, setSection } from './lib.js';
 export const PLAN_JSON = '.ultimate-tester.json';
 export const PLAN_MD = '.ultimate-tester.md';
 export const PLAN_FILES = [PLAN_JSON, PLAN_MD];
-const HERE = dirname(fileURLToPath(import.meta.url));
+const HERE = process.env.UT_HOME ?? dirname(fileURLToPath(import.meta.url)); // bundled by Nitro, import.meta.url leaves the repo
 let schema;
 export const planSchema = () => (schema ??= JSON.parse(readFileSync(join(HERE, 'schema', 'ultimate-tester.schema.json'), 'utf8')));
 
