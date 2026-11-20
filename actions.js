@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseStart, withPort, parsePersonas, shouldSkip } from './lib.js';
 import { signInWindow, freePort } from './live.js';
-import { readPlan, addLesson as planLesson, setNotes as planNotes, PLAN_FILES } from './plan.js';
+import { readPlan, addLesson as planLesson, setNotes as planNotes, PLAN_FILES, planSchema, validate, savePlanJson, answerPlan, getAt, schemaAt } from './plan.js';
 
 // UT_HOME is set by `ultimate-tester serve`; once Nitro bundles this file, import.meta.url no longer points at the repo.
 const HOME = process.env.UT_HOME ?? dirname(fileURLToPath(import.meta.url));
@@ -76,13 +76,45 @@ export function createActions(root) {
     };
   };
   const busy = () => job.status === 'working';
+  const questionsFile = join(state, 'questions.json');
+  // How setup asks for an answer: a choice, one line each, or a short text, from the field's schema.
+  const CHOICE = { saved: 'An account you sign in to once on each Mac', signUp: 'A fresh account I create each run', none: 'No sign-in', dev: 'Use the dev one', stop: "Stop, don't test without it" };
+  const answerShape = (field) => {
+    const s = schemaAt(field) ?? {};
+    if (s.enum) return { kind: 'choice', options: s.enum.map((v) => ({ value: v, label: CHOICE[v] ?? String(v) })) };
+    if (s.type === 'boolean') return { kind: 'choice', options: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] };
+    if (s.type === 'array') return { kind: 'lines', objects: !!s.items?.properties?.check };
+    return { kind: 'text' };
+  };
+  const questions = () => { try { return JSON.parse(readFileSync(questionsFile, 'utf8')); } catch { return []; } };
+  const keepGuess = (field) => writeFileSync(questionsFile, JSON.stringify(questions().filter((q) => q.field !== field), null, 2));
+  // One headless Claude call with structured output; resolves to the structured answer or null.
+  const askClaude = (prompt, schema, tools, onTool) => new Promise((resolve) => {
+    const child = spawn('claude', ['-p', '--model', MODEL, '--output-format', 'stream-json', '--verbose', '--no-session-persistence', '--setting-sources', '',
+      '--json-schema', JSON.stringify(schema), ...(tools.length ? ['--allowedTools', ...tools] : []), '--disallowedTools', 'Bash', 'Edit', 'Write', ...(tools.length ? [] : ['Read', 'Glob', 'Grep'])],
+    { cwd: root, env: { ...process.env, ULTIMATE_TESTER_CHILD: '1' } });
+    let buf = '', result = null;
+    child.stdout.on('data', (d) => {
+      buf += d;
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        let ev; try { ev = JSON.parse(line); } catch { continue; }
+        if (ev.type === 'result') result = ev.structured_output ?? null;
+        for (const x of ev.type === 'assistant' ? ev.message?.content ?? [] : []) if (x.type === 'tool_use') onTool(x.name, x.input ?? {});
+      }
+    });
+    child.on('close', () => resolve(result));
+    child.on('error', () => resolve(null));
+    child.stdin.end(prompt);
+  });
   // Uncommitted files except Tess's own plan; null in a repo with no commit yet (no HEAD to compare with).
   const changedFiles = () => {
     const git = (...a) => execFileSync('git', a, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean);
     try { return [...git('diff', 'HEAD', '--name-only'), ...git('ls-files', '--others', '--exclude-standard')].filter((f) => !PLAN_FILES.includes(f)); } catch { return null; }
   };
 
-  return {
+  const api = {
     status() {
       const plan = readPlan(root);
       const profile = plan.text;
@@ -99,6 +131,8 @@ export function createActions(root) {
         // Which file holds the plan, and what's wrong with it if it fails its schema (then nothing is tested).
         planFormat: plan.format,
         planErrors: plan.errors,
+        // What Tess couldn't work out from the repo, asked once in setup (a JSON plan only).
+        questions: plan.format === 'json' ? questions().map((q) => ({ ...q, value: getAt(plan.json, q.field), ...answerShape(q.field) })) : [],
         // Which version of the profile this page is showing; a save based on an older one is refused.
         profileHash: createHash('sha1').update(profile).digest('hex'),
         // Set up only once the person finishes getting started; a drafted plan alone is not checked yet.
@@ -131,45 +165,62 @@ export function createActions(root) {
       writeFileSync(profileFile, text.trimEnd() + '\n');
     },
 
-    // Tess reads the repo and drafts the profile; takes about a minute.
+    // Tess reads the repo and drafts the test plan as JSON that passes its schema; takes about a minute.
+    // What she couldn't work out from the repo comes back as questions, asked once in setup.
     draftProfile() {
       if (busy()) throw new Error('Something else is still working');
       set('draft', 'working', 'Tess is reading the repo…');
-      const schema = { type: 'object', required: ['profile'], properties: { profile: { type: 'string' } } };
-      const ask = `Read this repository (package.json, README, CLAUDE.md or AGENTS.md, .claude/launch.json, .env.example) and write an Ultimate Tester profile for it, in exactly this Markdown shape:
-
-${TEMPLATE}
-Rules: Start command runs the app locally on a port nothing else in the repo uses; "Ready when" names its http://localhost URL. Seed: a local-only reset or "none". Allowed URLs: localhost only, and name any production hosts to never touch. Test accounts: if the app needs sign-in, write "Saved session from Ultimate Tester setup" (never a password). Personas: each kind of user whose access differs — plan or feature tiers, staff roles, new versus long-standing accounts, the customer or shopper side, a signed-out visitor — one line each as "- key: who they are", adding "no sign-in" for guests and visitors; 2 to 6 personas, only ones the code shows exist. Must never break: 3 to 5 core flows a user does daily. Existing checks: only the test files a change touches, never full suites. Notes for Tess: keep the placeholder line as it is; the developer fills it in. If the repo has no pages a person uses (only an API, worker or backend): \"Ready when\" names a health or API URL, you MUST end the Start section with the exact line \"- Browser: not needed\" (it stops a browser opening for nothing), Personas are the kinds of caller, each ending in \"no sign-in\" because keys come from the local env file, never from the profile (\"- client: an app calling with a valid key, no sign-in\", \"- anonymous: a caller with no key, no sign-in\"), and Must never break lists requests and what should come back (\"Ask for the notes list and get back every saved note\"). Write every line in plain words someone who isn't a developer can follow ("Add a note and see it in the list", not "POST /notes returns 302"); put commands, paths and URLs in backticks.`;
-      const child = spawn('claude', ['-p', '--model', MODEL, '--output-format', 'stream-json', '--verbose', '--no-session-persistence', '--setting-sources', '',
-        '--json-schema', JSON.stringify(schema), '--allowedTools', 'Read', 'Glob', 'Grep', '--disallowedTools', 'Bash', 'Edit', 'Write'],
-      { cwd: root, env: { ...process.env, ULTIMATE_TESTER_CHILD: '1' } });
-      // Each file Tess opens shows up live on the onboarding screen.
+      return draftPlan().catch((e) => set('draft', 'error', `Tess could not draft the plan: ${e.message}`, job.steps));
+    },
+  };
+  async function draftPlan() {
       const rel = (f = '') => f.startsWith(root) ? f.slice(root.length + 1) : f;
       const say = (t) => { if (t && job.steps.at(-1) !== t) job.steps = [...job.steps, t].slice(-40); };
-      let buf = '';
-      let profile = null;
-      child.stdout.on('data', (d) => {
-        buf += d;
-        const lines = buf.split('\n');
-        buf = lines.pop();
-        for (const line of lines) {
-          let ev; try { ev = JSON.parse(line); } catch { continue; }
-          if (ev.type === 'result') profile = ev.structured_output?.profile ?? null;
-          for (const c of ev.type === 'assistant' ? ev.message?.content ?? [] : []) {
-            if (c.type !== 'tool_use') continue;
-            const i = c.input ?? {};
-            say(c.name === 'Read' ? `Reading ${rel(i.file_path)}` : c.name === 'Grep' ? `Searching for “${i.pattern}”` : c.name === 'Glob' ? `Looking for ${i.pattern}` : null);
-          }
-        }
-      });
-      child.on('close', () => {
-        if (profile?.trim()) {
-          writeFileSync(profileFile, profile.trim() + '\n');
-          set('draft', 'done', 'Drafted. Read it and fix anything wrong.', job.steps);
-        } else set('draft', 'error', 'Tess could not draft the profile. Fill it in by hand.', job.steps);
-      });
-      child.stdin.end(ask);
+      const onTool = (name, i) => say(name === 'Read' ? `Reading ${rel(i.file_path)}` : name === 'Grep' ? `Searching for “${i.pattern}”` : name === 'Glob' ? `Looking for ${i.pattern}` : null);
+      const out = { type: 'object', required: ['plan', 'unsure'], properties: { plan: { type: 'string' }, unsure: { type: 'array', items: { type: 'object', required: ['field', 'question'], properties: { field: { type: 'string' }, question: { type: 'string' } } } } } };
+      const ask = `Read this repository (package.json, README, CLAUDE.md or AGENTS.md, .claude/launch.json, .env.example) and write its Ultimate Tester test plan: JSON that passes this JSON Schema exactly. Return the JSON as text in "plan".
+
+${JSON.stringify(planSchema())}
+
+Rules:
+- start.command runs the app locally and contains {port}; start.port is a port nothing else in the repo uses; start.readyUrl is http://localhost:{port} plus a path (a health route when there are no pages). Settings the command needs go in start.env, never secrets.
+- browser is false when the app has no pages a person uses (only an API, worker or backend); then every persona's signIn is "none" (keys come from the local env file) and personas are the kinds of caller.
+- urls.allowed: dev hosts the app calls besides localhost (or just "localhost"). urls.never: production hosts you find. neverRun: deploy, publish and push commands you find in package.json scripts, plus "git push".
+- personas: 2 to 6 kinds of user whose access differs, only ones the code shows exist. signIn "saved" for real accounts, "signUp" only when the app has a local sign-up page Tess can use each run, "none" for guests. Never a password.
+- mustNeverBreak: 3 to 5 core things people do daily, each { "check": plain words, "as": persona key when it matters, "startAt": path when it matters }.
+- ownTests only when the repo has a test runner; its command runs one file with {file}.
+- backends: leave out unless the repo names the backend's git repo.
+- notes, lessons and environment start as [].
+- Every string is plain words someone who isn't a developer can follow ("Add a note and see it in the list", not "POST /notes returns 302").
+
+In "unsure", list each answer you could not work out from the repo (the schema marks the usual ones with x-ask): "field" is its path, like "personas[2].signIn", "urls.never" or "mustNeverBreak"; "question" is the plain question to ask the developer. Still fill those fields with your best guess so the plan passes the schema.`;
+      let draft = await askClaude(ask, out, ['Read', 'Glob', 'Grep'], onTool);
+      let json = null, errors = ['Tess returned no plan'];
+      const check = () => { try { json = JSON.parse(draft.plan); errors = validate(json); } catch (e) { errors = [`not valid JSON: ${e.message}`]; } };
+      if (draft) check();
+      // One repair round: show Tess exactly what fails the schema and let her fix only that.
+      if (draft && errors.length) {
+        say('Fixing the plan so it passes its schema');
+        const fixed = await askClaude(`This test plan fails its JSON Schema:\n${errors.slice(0, 20).map((x) => `- ${x}`).join('\n')}\n\nPlan:\n${draft.plan}\n\nSchema:\n${JSON.stringify(planSchema())}\n\nReturn the corrected plan as text in "plan", changing only what the problems need.`, { type: 'object', required: ['plan'], properties: { plan: { type: 'string' } } }, [], () => {});
+        if (fixed) { draft = { ...draft, plan: fixed.plan }; check(); }
+      }
+      if (errors.length) return set('draft', 'error', `Tess could not draft a plan that passes its schema: ${errors[0]}`, job.steps);
+      savePlanJson(root, json);
+      mkdirSync(state, { recursive: true });
+      writeFileSync(join(state, 'questions.json'), JSON.stringify((draft.unsure ?? []).filter((q) => getAt(json, q.field) !== undefined), null, 2));
+      set('draft', 'done', 'Drafted. Read it and fix anything wrong.', job.steps);
+  }
+  Object.assign(api, {
+    // A question from the draft, answered: written into the plan (checked against the schema) and crossed off.
+    answer(field, value) {
+      if (typeof field !== 'string' || !questions().some((q) => q.field === field)) throw new Error('That question was already answered');
+      answerPlan(root, field, value);
+      keepGuess(field);
     },
+    // "Keep your guess": the draft's answer stays as it is.
+    keep(field) { keepGuess(field); },
+  });
+  const rest = {
 
     // Starts the app if it is not up, then opens a visible Chrome on it for a person to sign in.
     async signInStart(persona) {
@@ -275,4 +326,5 @@ Rules: Start command runs the app locally on a port nothing else in the repo use
       run.unref();
     },
   };
+  return Object.assign(api, rest);
 }

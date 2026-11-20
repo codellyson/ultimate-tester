@@ -159,6 +159,7 @@ async function skip() { if (state.appId && (await setupAction('onboarded'))) sho
       <!-- 2 · Check the plan -->
       <template v-else-if="step === 2 && s">
         <TessSays>Here's how I'll test {{ app?.name }}. Fix anything that's wrong; I'll follow it exactly.</TessSays>
+        <PlanQuestions />
         <div class="ms-12"><ProfileCard :profile="s.profile" basic /></div>
         <TessSays>Anything I should always keep in mind? Things to focus on, skip, or that look broken but aren't.</TessSays>
         <div class="ms-12 flex flex-col gap-3">

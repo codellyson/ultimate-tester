@@ -147,3 +147,29 @@ export function setNotes(root, lines) {
   if (p.format === 'json') return writeJson(root, { ...p.json, notes: lines });
   writeFileSync(join(root, PLAN_MD), setSection(p.text, 'Notes for Tess', lines.map((l) => `- ${l}`).join('\n') || '- (anything Tess should always know: areas to focus on, things to skip, known quirks)'));
 }
+
+// Field paths like "personas[0].signIn" or "urls.never", as Tess names the answers she couldn't work out.
+export const pathOf = (field) => field.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean).map((k) => (/^\d+$/.test(k) ? Number(k) : k));
+export function getAt(obj, field) { return pathOf(field).reduce((o, k) => (o == null ? undefined : o[k]), obj); }
+export function setAt(obj, field, value) {
+  const keys = pathOf(field), copy = structuredClone(obj);
+  let o = copy;
+  keys.slice(0, -1).forEach((k, i) => { o[k] ??= typeof keys[i + 1] === 'number' ? [] : {}; o = o[k]; });
+  o[keys.at(-1)] = value;
+  return copy;
+}
+// The schema that describes one field, following properties, items and $refs, so setup can ask in the right shape.
+export function schemaAt(field, s = planSchema()) {
+  const deref = (x) => (x?.$ref ? x.$ref.split('/').slice(1).reduce((o, k) => o[k], s) : x);
+  return pathOf(field).reduce((cur, k) => { cur = deref(cur); return deref(typeof k === 'number' ? cur?.items : cur?.properties?.[k]); }, s);
+}
+
+// Writes a person's answer into the plan, checked against the schema first. Returns the saved plan.
+export function answerPlan(root, field, value) {
+  const p = readPlan(root);
+  if (p.format !== 'json') throw new Error('Only a JSON plan takes answers');
+  const next = setAt(p.json, field, value);
+  writeJson(root, next);
+  return next;
+}
+export const savePlanJson = writeJson;

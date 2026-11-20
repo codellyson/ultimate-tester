@@ -75,6 +75,7 @@ const left = computed(() => steps.value.filter((x) => !x.done).length)
           <Transition name="reveal">
             <div v-if="open === st.key" class="px-3 pb-3 flex flex-col gap-3">
               <template v-if="st.key === 'plan'">
+                <PlanQuestions />
                 <ProfileCard :profile="s.profile" />
                 <button v-if="state.confirmJustDrafted" class="btn-blue self-start" @click="state.confirmJustDrafted = false; open = steps.find((x) => !x.done)?.key ?? ''">Looks right</button>
               </template>

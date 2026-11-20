@@ -1,6 +1,6 @@
 # The test plan as a JSON file with a schema
 
-Status: step 1 built 2026-11-20; steps 2–5 not built. Comes before [linked apps](linked-apps.md), which adds `backends` to it.
+Status: steps 1–2 built 2026-11-20; steps 3–5 not built. Comes before [linked apps](linked-apps.md), which adds `backends` to it.
 
 ## Why
 
@@ -66,7 +66,7 @@ The schema rejects, among others: a command without `{port}`, a ready URL that i
 ## Build order
 
 1. **Done 2026-11-20.** `plan.js` reads `.ultimate-tester.json` (or the old `.md`), checks it against the schema with a small built-in validator (the engine ships without node_modules), and hands the engine the same text it always read. Lessons, notes and test-data recipes are written back into the JSON and re-checked before saving. An invalid plan is never half-read: nothing is tested and setup lists the problems. The plan card shows a JSON plan read-only until step 4. Not done yet: publishing the schema at its URL.
-2. Draft new plans as JSON through the schema; setup questions from unanswered `x-ask` fields.
+2. **Done 2026-11-20.** Tess drafts new plans as `.ultimate-tester.json`: the full schema is in her instructions, her answer is checked by the validator, and if it fails she gets one repair round with the exact problems. What she couldn't work out comes back as questions (field path + plain question), shown in setup with the right control for the field (choices, one per line, or text), her guess pre-filled. Each answer is checked against the schema before it's saved; Keep your guess leaves it. Answered questions never come back.
 3. Convert `.md` plans on first open, with confirmation.
 4. Plan card reads and writes the JSON fields.
 5. Per-Mac file for sign-ins and backend paths (they live in `~/.ultimate-tester` already; this gives them a fixed shape).

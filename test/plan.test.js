@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { validate, planToMarkdown, readPlan, addLesson, addEnvironment, PLAN_JSON } from '../plan.js';
+import { validate, planToMarkdown, readPlan, addLesson, addEnvironment, answerPlan, schemaAt, getAt, PLAN_JSON } from '../plan.js';
 import { parseStart, parsePersonas, withPort } from '../lib.js';
 
 const ex = (name) => JSON.parse(readFileSync(new URL(`../schema/examples/${name}.json`, import.meta.url), 'utf8'));
@@ -67,4 +67,19 @@ test('what Tess learns goes back into the JSON plan, still valid', () => {
   assert.equal(saved.lessons[0].text, 'Empty hub is expected for a new account');
   assert.equal(saved.environment.length, 1, 'the same test data replaces its old recipe');
   assert.equal(saved.environment[0].steps.length, 3);
+});
+
+test('an answer goes into the plan only if the plan stays valid', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ut-plan-'));
+  writeFileSync(join(dir, PLAN_JSON), JSON.stringify(K));
+  assert.deepEqual(schemaAt('personas[4].signIn').enum, ['saved', 'signUp', 'none']);
+  assert.equal(schemaAt('urls.never').type, 'array');
+  answerPlan(dir, 'backends[1].whenMissing', 'stop');
+  answerPlan(dir, 'urls.never', ['*.example.com']);
+  const saved = JSON.parse(readFileSync(join(dir, PLAN_JSON), 'utf8'));
+  assert.equal(getAt(saved, 'backends[1].whenMissing'), 'stop');
+  assert.deepEqual(saved.urls.never, ['*.example.com']);
+  assert.throws(() => answerPlan(dir, 'personas[0].signIn', 'maybe'), /Not saved/);
+  assert.throws(() => answerPlan(dir, 'urls.never', ['example.com/admin']), /Not saved/);
+  assert.equal(JSON.parse(readFileSync(join(dir, PLAN_JSON), 'utf8')).personas[0].signIn, 'saved', 'a refused answer changes nothing');
 });
