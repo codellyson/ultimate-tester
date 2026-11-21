@@ -10,6 +10,7 @@ import { startBrowser, freePort, useSession } from '../live.js';
 import { readPlan, addEnvironment, PLAN_FILES } from '../plan.js';
 import { startBackends } from '../linked.js';
 import { listReplays, saveReplays, runReplays, startOwnApp } from '../replay.js';
+import { compareFailures } from '../baseline.js';
 import { sessionFile } from '../actions.js';
 import { addApp, readSettings } from '../apps.js';
 
@@ -265,18 +266,19 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   const wanted = listReplays(root()).filter((r) => againNames.includes(r.name) || (r.source === 'must-never-break' && (!mnb || mnb.includes(r.name))));
   const noBrowser = /^- Browser:\s*not needed/im.test(testPlan.text);
   let shared = null, own = null, replayed = [];
+  const personaList = parsePersonas(testPlan.text);
+  const sessionFor = (key) => { const p = personaList.find((x) => x.key === key); return p?.signIn ? sessionFile(join(process.cwd(), STATE), key, personaList) : null; };
+  const backendUrls = Object.fromEntries(linked.apps.filter((a) => a.url).map((a) => [a.name, a.url]));
   if (wanted.length && !noBrowser) {
     shared = await startBrowser(runDir);
     own = shared && await startOwnApp(root(), port, runDir, linked.env, join(HOME, 'own-build', 'nuxt'));
     if (own?.url) {
-      const list = parsePersonas(testPlan.text);
       const items = wanted.map((r) => ({ name: r.name, source: r.source ?? 'diff', status: 'running', note: 'Replaying', replayed: true }));
       writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items));
       try {
         replayed = await runReplays(wanted, {
           endpoint: shared.endpoint, base: own.url, runDir,
-          backends: Object.fromEntries(linked.apps.filter((a) => a.url).map((a) => [a.name, a.url])),
-          sessionFor: (key) => { const p = list.find((x) => x.key === key); return p?.signIn ? sessionFile(join(process.cwd(), STATE), key, list) : null; },
+          backends: backendUrls, sessionFor,
           onEach: (res) => { const it = items.find((i) => i.name === res.name); Object.assign(it, { status: res.ok ? 'pass' : 'running', note: res.ok ? `Replayed. ${res.notes.at(-1) ?? ''}`.trim() : 'Replay failed; Tess will look again' }); writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items)); },
         });
       } catch (e) { appendFileSync(join(runDir, 'live.log'), `say: I couldn't run the saved replays (${e.message.split('\n')[0]}), so I'll check everything myself.\n`); }
@@ -313,6 +315,20 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   try {
     if (allReplayed) raw = { status: 'pass', summary: `I replayed all ${passedR.length} checks from the last test and every one passed, so I didn't need to look again.`, flows: [] };
     else ({ verdict: raw, costUsd } = await runTester(prompt, runDir, shared));
+    // A must-never-break check that failed: was it already broken before this change? Asked while the backends still run.
+    if (raw.flows?.some((f) => f.status === 'fail' && f.source === 'must-never-break')) {
+      raw = { ...raw, flows: await compareFailures(root(), raw.flows, {
+        kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit, runDir, env: linked.env, backends: backendUrls, sessionFor,
+        ownBuild: join(HOME, 'own-build', 'nuxt'), say: (t) => appendFileSync(join(runDir, 'live.log'), `say: ${t}\n`),
+      }) };
+      const known = raw.flows.filter((f) => f.status === 'known').length;
+      if (known) raw.summary = `${raw.summary} ${known === 1 ? 'One failed check was' : `${known} failed checks were`} already broken before this change, so this change didn't cause ${known === 1 ? 'it' : 'them'}.`;
+      try {
+        const items = JSON.parse(readFileSync(join(runDir, 'plan.json'), 'utf8'));
+        for (const it of items) { const f = raw.flows.find((x) => x.name === it.name && x.cause); if (f) it.status = f.status; }
+        writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items));
+      } catch {}
+    }
   } finally { linked.stop(); own?.stop?.(); shared?.stop(); }
   // Tess's own checks win over a replay of the same name; replays she didn't redo stand as passed.
   raw = { ...raw, flows: [...replayFlows.filter((r) => !(raw.flows ?? []).some((f) => f.name === r.name)), ...(raw.flows ?? [])] };

@@ -56,8 +56,8 @@ async function playwright() {
   return (await import(pathToFileURL(req.resolve('playwright-core')).href)).default ?? (await import(pathToFileURL(req.resolve('playwright-core')).href));
 }
 
-async function waitFor(url, ms) {
-  for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 1000))) {
+async function waitFor(url, ms, gone = () => false) {
+  for (const end = Date.now() + ms; Date.now() < end && !gone(); await new Promise((r) => setTimeout(r, 1000))) {
     try { if ((await fetch(url, { signal: AbortSignal.timeout(5000) })).status < 500) return true; } catch {}
   }
   return false;
@@ -70,12 +70,16 @@ export async function startOwnApp(root, port, runDir, env = {}, ownBuild = null)
   const { command, url } = parseStart(withPort(plan.text, port));
   if (!command || !url) return { error: 'the plan has no start command' };
   const log = join(runDir, 'app.log');
-  const { PORT, HOST, NITRO_PORT, NITRO_HOST, ...base } = process.env;
+  const { PORT, HOST, NITRO_PORT, NITRO_HOST, ...rest } = process.env;
+  // Started as a person would start it: tools that act differently for an AI agent (Next.js stops to show
+  // an upgrade notice) see none, even when the engine itself runs under Claude Code.
+  const base = Object.fromEntries(Object.entries(rest).filter(([k]) => !/^(AI_AGENT|CLAUDECODE|CLAUDE_CODE_.*)$/.test(k)));
   const start = (cmd) => new Promise((resolve) => {
     const out = openSync(log, 'a');
     const child = spawn('sh', ['-c', cmd], { cwd: root, detached: true, stdio: ['ignore', out, out], env: { ...base, ...env } });
-    child.on('exit', () => resolve({ child, ok: false }));
-    waitFor(url, (plan.json?.start?.readySeconds ?? 120) * 1000).then((ok) => resolve({ child, ok }));
+    let exited = false;
+    child.on('exit', () => { exited = true; resolve({ child, ok: false }); });
+    waitFor(url, (plan.json?.start?.readySeconds ?? 120) * 1000, () => exited).then((ok) => resolve({ child, ok }));
   });
   let r = await start(command);
   if (!r.ok && ownBuild && /Another Nuxt (dev server|build) is already|NUXT_IGNORE_LOCK/i.test(readFileSync(log, 'utf8'))) r = await start(`${command} --extends ${JSON.stringify(ownBuild)}`);
@@ -116,7 +120,8 @@ export async function runReplays(replays, { endpoint, base, backends = {}, runDi
     try {
       writeFileSync(file, r.code.includes('export default') ? r.code : `export default async ({ page, base, as, see, check, request }) => {\n${r.code}\n};\n`);
       const fn = (await import(pathToFileURL(file).href + `?t=${Date.now()}`)).default;
-      await Promise.race([fn(helpers), new Promise((_, no) => setTimeout(() => no(new Error(`took longer than ${REPLAY_MS / 1000}s`)), REPLAY_MS))]);
+      let timer;
+      try { await Promise.race([fn(helpers), new Promise((_, no) => { timer = setTimeout(() => no(new Error(`took longer than ${REPLAY_MS / 1000}s`)), REPLAY_MS); })]); } finally { clearTimeout(timer); }
     } catch (e) { error = e.message.split('\n')[0].slice(0, 400); }
     try { await page.screenshot({ path: join(runDir, shot) }); } catch {}
     const res = { name: r.name, source: r.source, persona: r.persona, ok: !error, notes, error, shot };

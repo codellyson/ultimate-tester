@@ -28,7 +28,7 @@ export function runInfo(root: string, id: string) {
   const stopped = existsSync(join(dir, 'stopped'))
   // Enough to name the outcome in the history list without opening the test.
   const flows: { status: string }[] = v?.flows ?? []
-  const counts = { pass: flows.filter((f) => f.status === 'pass').length, fail: flows.filter((f) => f.status === 'fail').length, unk: flows.filter((f) => f.status === 'unverified').length }
+  const counts = { pass: flows.filter((f) => f.status === 'pass').length, fail: flows.filter((f) => f.status === 'fail').length, unk: flows.filter((f) => f.status === 'unverified').length, known: flows.filter((f) => f.status === 'known').length }
   const shotCount = existsSync(dir) ? readdirSync(dir).filter((f: string) => f.endsWith('.png')).length : 0
   return { id, status: stopped ? 'stopped' : v?.status ?? (quiet ? 'stopped' : 'running'), summary: v?.summary ?? '', title: runTitle(c), kind: c?.kind ?? null, target: c?.target ?? null, note: c?.note ?? '', source: c?.source ?? null, counts, shotCount }
 }

@@ -4,12 +4,13 @@ import { PhCheckCircle, PhXCircle, PhCircleDashed, PhArrowClockwise, PhCircle, P
 // A Phosphor icon at a fixed weight, used like any icon component.
 const ph = (c: Component, weight: 'regular' | 'fill' | 'bold' = 'regular') => markRaw({ inheritAttrs: true, render() { return h(c as any, { weight }) } }) as Component
 
-export type Status = 'pass' | 'fail' | 'unverified' | 'running' | 'pending' | 'stopped' | 'notrun'
+export type Status = 'pass' | 'fail' | 'known' | 'unverified' | 'running' | 'pending' | 'stopped' | 'notrun'
 
 // One Phosphor icon per result (DESIGN.md: the only coloured icons); render with <component :is="statusOf(s).icon" class="size-4" />.
 export const STATUS: Record<string, { icon: Component, cls: string, word: string }> = {
   pass: { icon: ph(PhCheckCircle), cls: 'text-[var(--ok)]', word: 'passed' },
   fail: { icon: ph(PhXCircle, 'fill'), cls: 'text-[var(--bad)]', word: 'broke' },
+  known: { icon: ph(PhXCircle), cls: 'text-[var(--muted)]', word: 'already broken' },
   unverified: { icon: ph(PhCircleDashed), cls: 'text-[var(--faint)]', word: "couldn't run" },
   running: { icon: ph(PhArrowClockwise), cls: 'text-[var(--ink)] spin-slow', word: 'testing now' },
   pending: { icon: ph(PhCircle), cls: 'text-[var(--line-strong)]', word: 'to go' },
@@ -67,13 +68,14 @@ export const TRIGGERS = [
 ] as const
 
 // A finished test in a few words, from its counts: "1 of 3 broke", "4 of 5 passed, 1 couldn't run", "3 passed".
-export function outcome(r: { status: string, counts?: { pass: number, fail: number, unk: number } }) {
+export function outcome(r: { status: string, counts?: { pass: number, fail: number, unk: number, known?: number } }) {
   if (r.status === 'running') return 'Testing now'
   if (r.status === 'stopped') return 'Stopped'
   const c = r.counts
-  const total = c ? c.pass + c.fail + c.unk : 0
+  const total = c ? c.pass + c.fail + c.unk + (c.known ?? 0) : 0
   if (!c || !total) return statusOf(r.status).word.replace(/^./, (x) => x.toUpperCase())
-  if (c.fail) return `${c.fail} of ${total} broke`
-  if (c.unk) return `${c.pass} of ${total} passed, ${c.unk} couldn't run`
-  return `${c.pass} passed`
+  const before = c.known ? `, ${c.known} already broken` : ''
+  if (c.fail) return `${c.fail} of ${total} broke${before}`
+  if (c.unk) return `${c.pass} of ${total} passed, ${c.unk} couldn't run${before}`
+  return `${c.pass} passed${before}`
 }

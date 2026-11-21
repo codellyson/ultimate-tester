@@ -24,7 +24,8 @@ const count = (st: string) => plan.value.filter((p) => p.status === st).length
 const pass = computed(() => count('pass'))
 const fail = computed(() => count('fail'))
 const unk = computed(() => count('unverified'))
-const todo = computed(() => plan.value.length - pass.value - fail.value - unk.value)
+const known = computed(() => count('known'))
+const todo = computed(() => plan.value.length - pass.value - fail.value - unk.value - known.value)
 
 // Which persona a "can't check" is waiting on: its own, or one named in Tess's note ("needs Store owner with B2B").
 function blockedBy(p: PlanItem): Persona | null {
@@ -72,7 +73,8 @@ const verdict = computed(() => {
   // Green only when nothing is left unchecked, whatever the stored status says.
   if (v.value?.status === 'pass' && !unk.value) {
     const note = /\bnot checked\b|couldn't check|didn't check/i.test(v.value.summary ?? '')
-    return { lead: `${n(pass.value, 'check')} passed.`, em: note ? ' Tess lists something she didn\'t check.' : '', cls: note ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }
+    const before = known.value ? ` ${known.value} ${known.value === 1 ? 'was' : 'were'} already broken before this change.` : ''
+    return { lead: `${n(pass.value, 'check')} passed.`, em: before || (note ? ' Tess lists something she didn\'t check.' : ''), cls: note || before ? 'text-[var(--warn)]' : 'text-[var(--ok)]' }
   }
   if (v.value?.status === 'fail' || (!v.value && fail.value)) return { lead: `${fail.value} of ${n(total, 'check')} broke.`, em: '', cls: 'text-[var(--bad)]' }
   // Tess never got evidence from the app and no missing sign-in explains it.
@@ -127,6 +129,7 @@ const pill = computed(() => {
   if (isSetup.value && v.value) return unk.value ? { kind: 'unk', text: `${unk.value} need${unk.value === 1 ? 's' : ''} you · ${pass.value} set up` } : { kind: 'done', text: `${pass.value} set up` }
   if (fail.value) return { kind: 'fail', text: `${fail.value} broke · ${pass.value} passed` }
   if (unk.value) return { kind: 'unk', text: `${unk.value} couldn't run · ${pass.value} passed` }
+  if (known.value) return { kind: 'unk', text: `${pass.value} passed · ${known.value} already broken` }
   if (v.value) return { kind: 'done', text: `${pass.value} of ${plan.value.length || pass.value} passed` }
   return { kind: 'live', text: 'Starting' }
 })
@@ -252,7 +255,7 @@ async function toggleVoice() {
 const VERDICT_LEAD = /^\s*(safe to push|don['’]t push yet|not safe yet|can['’]t say yet)[^.!?:]*[.!?:]\s*/i
 // A stopped test explains how far Tess got, rather than replaying whatever she said last.
 const stoppedNote = computed(() => {
-  const done = plan.value.filter((p) => ['pass', 'fail', 'unverified'].includes(p.status)).length
+  const done = plan.value.filter((p) => ['pass', 'fail', 'known', 'unverified'].includes(p.status)).length
   const last = says.value.at(-1)
   return `You stopped me ${done ? `after ${done} of ${plan.value.length} checks` : 'before I checked anything'}.${last ? ` I was at: “${last}”` : ''}`
 })
@@ -458,6 +461,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
         </div>
         <p v-else-if="!live && saw && !startFail && !reqProof" class="selectable text-[14px] leading-[1.55] text-[var(--text-2)] text-pretty"><b class="font-semibold text-[var(--ink)]">{{ selItem?.status === 'unverified' ? "Why it didn't run:" : 'What I saw:' }}</b> {{ saw }}</p>
         <template v-if="!live && selFlow && selFlow.status !== 'pass'">
+          <p v-if="selFlow.causeWhy" class="selectable text-[14px] leading-[1.55] text-[var(--text-2)] text-pretty"><b class="font-semibold text-[var(--ink)]">Before this change:</b> {{ selFlow.causeWhy }}</p>
           <p v-if="selFlow.expected && !reqProof" class="selectable text-[13px] text-[var(--muted)]">Expected: {{ selFlow.expected }}</p>
         </template>
       </main>
