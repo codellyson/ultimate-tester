@@ -2,11 +2,11 @@
 import type { Target } from '~/utils/format'
 
 export type App = { id: string, name: string, root: string, profileReady: boolean, signedIn: boolean, onboarded: boolean, running: boolean, last: RunInfo | null }
-export type RunInfo = { id: string, status: string, summary: string, title: string, kind?: string | null, target?: string | null, note?: string, counts?: { pass: number, fail: number, unk: number }, shotCount?: number }
+export type RunInfo = { id: string, status: string, summary: string, title: string, kind?: string | null, target?: string | null, note?: string, counts?: { pass: number, fail: number, unk: number, known?: number }, shotCount?: number, setup?: string | null }
 export type PlanItem = { name: string, why?: string, source?: string, status: string, note?: string, persona?: string, app?: string, replayed?: boolean }
 export type Flow = { name: string, app?: string, replayed?: boolean, status: string, steps?: string[], expected?: string, actual?: string, evidence?: string[], url?: string, persona?: string, needs?: string, setupBy?: 'tess' | 'person', requests?: Req[], cause?: 'regression' | 'known' | 'unknown', causeWhy?: string }
 export type Req = { method: string, path: string, sent?: string, status: number, ms?: number, got?: string, expected?: string }
-export type Verdict = { status: string, summary: string, flows: Flow[], durationMs?: number, usage?: string }
+export type Verdict = { status: string, summary: string, flows: Flow[], setup?: 'broken', durationMs?: number, usage?: string }
 export type RunDetail = RunInfo & {
   apps?: { name: string, role: 'app' | 'backend', source?: 'local' | 'dev' | 'missing', branch?: string | null, commit?: string | null, dirty?: boolean, why?: string | null }[] | null
   plan: PlanItem[] | null, planUnreadable: boolean, intro: string, change: { message: string, files: string[], mode: string, note?: string, kind?: string, target?: string | null, source?: { id: string, kind: string, target: string | null, note: string, checks: string[] } } | null,

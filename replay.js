@@ -83,14 +83,19 @@ export async function startOwnApp(root, port, runDir, env = {}, ownBuild = null)
   });
   let r = await start(command);
   if (!r.ok && ownBuild && /Another Nuxt (dev server|build) is already|NUXT_IGNORE_LOCK/i.test(readFileSync(log, 'utf8'))) r = await start(`${command} --extends ${JSON.stringify(ownBuild)}`);
-  const stop = () => { try { process.kill(-r.child.pid, 'SIGTERM'); } catch {} };
+  // Resolves once the app's whole process group is gone, so another copy can start from the same folder.
+  const stop = async () => {
+    try { process.kill(-r.child.pid, 'SIGTERM'); } catch { return; }
+    for (let i = 0; i < 50; i++) { try { process.kill(-r.child.pid, 0); } catch { return; } await new Promise((ok) => setTimeout(ok, 200)); }
+  };
   if (!r.ok) { stop(); return { error: `the app didn't start (its output is in ${log})` }; }
-  return { url: url.match(/^https?:\/\/[^/]+/)[0], stop };
+  return { url: url.match(/^https?:\/\/[^/]+/)[0], stop, pid: r.child.pid };
 }
 
 // Runs replays in the test's browser. Each gets a fresh page, its persona's sign-in, and a screenshot at the end.
 // Returns one result per replay: { name, source, persona, ok, notes, error, shot }.
-export async function runReplays(replays, { endpoint, base, backends = {}, runDir, sessionFor, onEach }) {
+// stepMs/replayMs: a freshly started dev server compiles each page on its first visit, so callers using one allow longer.
+export async function runReplays(replays, { endpoint, base, backends = {}, runDir, sessionFor, onEach, stepMs = STEP_MS, replayMs = REPLAY_MS }) {
   const { chromium } = await playwright();
   const browser = await chromium.connectOverCDP(endpoint);
   const context = browser.contexts()[0] ?? await browser.newContext();
@@ -98,7 +103,7 @@ export async function runReplays(replays, { endpoint, base, backends = {}, runDi
   for (const r of replays) {
     const notes = [];
     const page = await context.newPage();
-    page.setDefaultTimeout(STEP_MS);
+    page.setDefaultTimeout(stepMs);
     const shot = `replay-${slug(r.name)}.png`;
     const helpers = {
       page, base, notes,
@@ -121,7 +126,7 @@ export async function runReplays(replays, { endpoint, base, backends = {}, runDi
       writeFileSync(file, r.code.includes('export default') ? r.code : `export default async ({ page, base, as, see, check, request }) => {\n${r.code}\n};\n`);
       const fn = (await import(pathToFileURL(file).href + `?t=${Date.now()}`)).default;
       let timer;
-      try { await Promise.race([fn(helpers), new Promise((_, no) => { timer = setTimeout(() => no(new Error(`took longer than ${REPLAY_MS / 1000}s`)), REPLAY_MS); })]); } finally { clearTimeout(timer); }
+      try { await Promise.race([fn(helpers), new Promise((_, no) => { timer = setTimeout(() => no(new Error(`took longer than ${replayMs / 1000}s`)), replayMs); })]); } finally { clearTimeout(timer); }
     } catch (e) { error = e.message.split('\n')[0].slice(0, 400); }
     try { await page.screenshot({ path: join(runDir, shot) }); } catch {}
     const res = { name: r.name, source: r.source, persona: r.persona, ok: !error, notes, error, shot };

@@ -23,6 +23,9 @@ export function judge(now, before) {
   if (!now) return { cause: 'unknown', why: "I couldn't repeat this check with its script." };
   if (now.ok) return { cause: 'unknown', why: "When the engine repeated this check with my script it passed, so I couldn't confirm the failure." };
   if (!before) return { cause: 'unknown', why: "I couldn't run the code from before this change to compare." };
+  // A timeout says a page was slow, not what was wrong with it: no claim either way.
+  const slow = (r) => /Timeout \d+ms exceeded|took longer than/i.test(r.error ?? '');
+  if (slow(now) || slow(before)) return { cause: 'unknown', why: `A page was too slow to tell (${slow(now) ? now.error : before.error}), so I can't say whether this change caused it.` };
   if (before.ok) return { cause: 'regression', why: 'It passed on the code from before this change, so this change broke it.' };
   // Ports and timings differ between the two copies; anything else that differs is a different failure.
   const same = (e) => String(e ?? '').replace(/\d+/g, '#');
@@ -64,7 +67,9 @@ export async function compareFailures(root, flows, { kind, target, runDir, env =
   const stops = [];
   if (scripts.length) {
     say(`${scripts.length === 1 ? 'One check that must never break' : `${scripts.length} checks that must never break`} failed. I'm repeating ${scripts.length === 1 ? 'it' : 'them'} on the code from before this change, to see whether this change caused ${scripts.length === 1 ? 'it' : 'them'}.`);
-    const browser = await startBrowser(runDir);
+    // Its own Chrome profile: the run's browser may still hold the run folder's one.
+    mkdirSync(join(runDir, 'recheck'), { recursive: true });
+    const browser = await startBrowser(join(runDir, 'recheck'));
     if (browser) stops.push(() => browser.stop());
     let base = null;
     try { base = await checkout(root, baselineRef(kind, target)); stops.push(base.remove); } catch (e) { say(`I couldn't set up the code from before this change: ${e.message}.`); }
@@ -72,10 +77,11 @@ export async function compareFailures(root, flows, { kind, target, runDir, env =
       const dirs = { now: join(runDir, 'recheck-now'), before: join(runDir, 'recheck-before') };
       mkdirSync(dirs.now, { recursive: true }); mkdirSync(dirs.before, { recursive: true });
       // Each check on freshly started copies: one check's failure (a dev server stuck on a build error) can't spoil the next.
+      // Each copy is freshly started and compiles each page on its first visit: allow it time.
       const once = async (where, dir, script, res, extra) => {
         const app = await startOwnApp(where, await freePort(), dir, env, extra);
-        try { if (app?.url) for (const r of await runReplays([script], { endpoint: browser.endpoint, backends, runDir: dir, sessionFor, base: app.url })) res.set(r.name, r); }
-        finally { app?.stop?.(); }
+        try { if (app?.url) for (const r of await runReplays([script], { endpoint: browser.endpoint, backends, runDir: dir, sessionFor, base: app.url, stepMs: 60_000, replayMs: 180_000 })) res.set(r.name, r); }
+        finally { await app?.stop?.(); }
       };
       if (browser) for (const s of scripts) {
         await once(root, dirs.now, s, nowRes, ownBuild);

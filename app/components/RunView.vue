@@ -66,6 +66,8 @@ const verdict = computed(() => {
   if (isSetup.value && v.value) return unk.value
     ? { lead: `${pass.value} of ${n(total, 'item')} set up.`, em: ` ${unk.value} ${unk.value === 1 ? 'needs' : 'need'} you.`, cls: 'text-[var(--warn)]' }
     : { lead: `${n(pass.value, 'item')} set up.`, em: '', cls: 'text-[var(--ok)]' }
+  // The engine found the test setup broken before Tess began: nothing is known about the change.
+  if (v.value?.setup === 'broken') return { lead: 'Setup broken.', em: ' Nothing was tested.', cls: 'text-[var(--warn)]' }
   // Stopped comes first: a stopped test is not a result, whatever was checked before it.
   if (r.value.status === 'stopped') return v.value?.summary === 'You stopped this test.'
     ? { lead: 'You stopped this test.', em: '', cls: '' }
@@ -127,6 +129,7 @@ const pill = computed(() => {
   if (live.value) return { kind: 'live', text: `${isSetup.value ? 'Setting up' : 'Testing'} · ${plan.value.length - todo.value} of ${plan.value.length || '…'}` }
   if (r.value.status === 'stopped') return { kind: 'stopped', text: 'Stopped' }
   if (isSetup.value && v.value) return unk.value ? { kind: 'unk', text: `${unk.value} need${unk.value === 1 ? 's' : ''} you · ${pass.value} set up` } : { kind: 'done', text: `${pass.value} set up` }
+  if (v.value?.setup === 'broken') return { kind: 'unk', text: 'Setup broken' }
   if (fail.value) return { kind: 'fail', text: `${fail.value} broke · ${pass.value} passed` }
   if (unk.value) return { kind: 'unk', text: `${unk.value} couldn't run · ${pass.value} passed` }
   if (known.value) return { kind: 'unk', text: `${pass.value} passed · ${known.value} already broken` }

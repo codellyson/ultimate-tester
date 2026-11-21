@@ -68,8 +68,9 @@ export const TRIGGERS = [
 ] as const
 
 // A finished test in a few words, from its counts: "1 of 3 broke", "4 of 5 passed, 1 couldn't run", "3 passed".
-export function outcome(r: { status: string, counts?: { pass: number, fail: number, unk: number, known?: number } }) {
+export function outcome(r: { status: string, setup?: string | null, counts?: { pass: number, fail: number, unk: number, known?: number } }) {
   if (r.status === 'running') return 'Testing now'
+  if (r.setup === 'broken') return 'Setup broken'
   if (r.status === 'stopped') return 'Stopped'
   const c = r.counts
   const total = c ? c.pass + c.fail + c.unk + (c.known ?? 0) : 0

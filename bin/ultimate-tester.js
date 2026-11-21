@@ -11,6 +11,7 @@ import { readPlan, addEnvironment, PLAN_FILES } from '../plan.js';
 import { startBackends } from '../linked.js';
 import { listReplays, saveReplays, runReplays, startOwnApp } from '../replay.js';
 import { compareFailures } from '../baseline.js';
+import { signedOut, setupProblem } from '../preflight.js';
 import { sessionFile } from '../actions.js';
 import { addApp, readSettings } from '../apps.js';
 
@@ -163,10 +164,11 @@ async function openWindow(view = '', alwaysOpen = false) {
 }
 
 // One line per persona for the prompt, saying whether a sign-in is saved.
-function personaLines() {
+// out: personas whose saved sign-in the preflight found no longer works.
+function personaLines(out = []) {
   const list = parsePersonas(readPlan(root()).text);
   return list.map((p) => {
-    const ready = !p.signIn ? 'no sign-in needed' : existsSync(sessionFile(join(process.cwd(), STATE), p.key, list)) ? 'sign-in saved' : 'NOT SET UP (no saved sign-in)';
+    const ready = !p.signIn ? 'no sign-in needed' : out.includes(p.key) ? 'SIGNED OUT (the saved sign-in no longer works; mark its checks unverified with "sign in again in Setup")' : existsSync(sessionFile(join(process.cwd(), STATE), p.key, list)) ? 'sign-in saved' : 'NOT SET UP (no saved sign-in)';
     return `- ${p.key}: ${p.label} [${ready}]`;
   }).join('\n');
 }
@@ -269,36 +271,44 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   const personaList = parsePersonas(testPlan.text);
   const sessionFor = (key) => { const p = personaList.find((x) => x.key === key); return p?.signIn ? sessionFile(join(process.cwd(), STATE), key, personaList) : null; };
   const backendUrls = Object.fromEntries(linked.apps.filter((a) => a.url).map((a) => [a.name, a.url]));
-  if (wanted.length && !noBrowser) {
-    shared = await startBrowser(runDir);
-    own = shared && await startOwnApp(root(), port, runDir, linked.env, join(HOME, 'own-build', 'nuxt'));
-    if (own?.url) {
-      const items = wanted.map((r) => ({ name: r.name, source: r.source ?? 'diff', status: 'running', note: 'Replaying', replayed: true }));
-      writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items));
-      try {
-        replayed = await runReplays(wanted, {
-          endpoint: shared.endpoint, base: own.url, runDir,
-          backends: backendUrls, sessionFor,
-          onEach: (res) => { const it = items.find((i) => i.name === res.name); Object.assign(it, { status: res.ok ? 'pass' : 'running', note: res.ok ? `Replayed. ${res.notes.at(-1) ?? ''}`.trim() : 'Replay failed; Tess will look again' }); writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items)); },
-        });
-      } catch (e) { appendFileSync(join(runDir, 'live.log'), `say: I couldn't run the saved replays (${e.message.split('\n')[0]}), so I'll check everything myself.\n`); }
-    }
+  // Preflight: the engine starts the app and tries each saved sign-in before Tess spends a run on it.
+  own = await startOwnApp(root(), port, runDir, linked.env, join(HOME, 'own-build', 'nuxt'));
+  shared = own?.url && !noBrowser ? await startBrowser(runDir) : null;
+  const out = shared ? await signedOut(personaList, { endpoint: shared.endpoint, base: own.url, runDir, sessionFor, plan: testPlan.json }).catch(() => []) : [];
+  const problem = setupProblem({ app: own, personas: personaList, out, log: join(runDir, 'app.log') });
+  if (problem) {
+    linked.stop(); own?.stop?.(); shared?.stop();
+    const verdict = { status: 'unverified', setup: 'broken', summary: `I didn't test anything, because the test setup is broken: ${problem}. Nothing is known about the change yet.`, flows: [] };
+    writeFileSync(join(runDir, 'verdict.json'), JSON.stringify(verdict, null, 2));
+    writeFileSync(join(runDir, 'report.txt'), `Ultimate Tester: SETUP BROKEN — ${verdict.summary}`);
+    return { status: 'unverified', report: `Ultimate Tester: SETUP BROKEN — ${verdict.summary}` };
+  }
+  if (wanted.length && shared) {
+    const items = wanted.map((r) => ({ name: r.name, source: r.source ?? 'diff', status: 'running', note: 'Replaying', replayed: true }));
+    writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items));
+    try {
+      replayed = await runReplays(wanted, {
+        endpoint: shared.endpoint, base: own.url, runDir,
+        backends: backendUrls, sessionFor,
+        onEach: (res) => { const it = items.find((i) => i.name === res.name); Object.assign(it, { status: res.ok ? 'pass' : 'running', note: res.ok ? `Replayed. ${res.notes.at(-1) ?? ''}`.trim() : 'Replay failed; Tess will look again' }); writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items)); },
+      });
+    } catch (e) { appendFileSync(join(runDir, 'live.log'), `say: I couldn't run the saved replays (${e.message.split('\n')[0]}), so I'll check everything myself.\n`); }
   }
   const passedR = replayed.filter((r) => r.ok), failedR = replayed.filter((r) => !r.ok);
   const replayFlows = passedR.map((r) => ({ name: r.name, status: 'pass', source: r.source ?? 'diff', persona: r.persona ?? undefined, evidence: [join(runDir, r.shot)], actual: r.notes.join(' ') || 'Replayed; every step passed.', replayed: true }));
   const replayedText = !replayed.length ? 'No checks were replayed this time.' : [
     passedR.length ? `These checks already passed by replay just now; don't check them again and don't list them in plan.json or the verdict: ${passedR.map((r) => `"${r.name}"`).join(', ')}.` : '',
     failedR.length ? `These replays failed. Check each one yourself as a normal flow with the same name, say whether the app is broken or the replay was out of date, and give a new replay either way:\n${failedR.map((r) => `  - "${r.name}": ${r.error}`).join('\n')}` : '',
-    own?.url ? `Your copy of the app is already running at ${own.url} (port {{PORT}}), started for the replays. Use it; don't start another and don't stop it.` : '',
-  ].filter(Boolean).join('\n');
+  ].filter(Boolean).join('\n') + `\n- Your copy of the app is already running at ${own.url} (port {{PORT}}); the engine started it and checked the sign-ins. Use it; don't start another and don't stop it.`;
   const prompt = readFileSync(join(HOME, 'prompt.md'), 'utf8')
     .replace('{{REPLAYED}}', () => replayedText)
     .replace('{{BACKENDS}}', () => (linked.linked ? linked.lines.join('\n') : 'None. This app is tested on its own.'))
     .replace('{{BACKEND_DIFFS}}', () => linked.diffs.join('\n\n') || 'None.')
     .replace('{{PROFILE}}', () => withPort(readPlan(root()).text, port))
-    .replace('{{PERSONAS}}', () => personaLines())
+    .replace('{{PERSONAS}}', () => personaLines(out))
     .replaceAll('{{AS}}', `node ${JSON.stringify(SELF)} as`)
     .replaceAll('{{PORT}}', String(port))
+    .replaceAll('{{APP_PGID}}', String(own.pid))
     .replaceAll('{{NUXT_OWN_BUILD}}', JSON.stringify(join(HOME, 'own-build', 'nuxt')))
     .replaceAll('{{RUN_DIR}}', () => runDir)
     .replace('{{NOTE}}', () => note.trim() || 'None.')
@@ -317,6 +327,7 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
     else ({ verdict: raw, costUsd } = await runTester(prompt, runDir, shared));
     // A must-never-break check that failed: was it already broken before this change? Asked while the backends still run.
     if (raw.flows?.some((f) => f.status === 'fail' && f.source === 'must-never-break')) {
+      await own?.stop?.(); // tools like Next.js run one dev server per folder; the comparison starts its own
       raw = { ...raw, flows: await compareFailures(root(), raw.flows, {
         kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit, runDir, env: linked.env, backends: backendUrls, sessionFor,
         ownBuild: join(HOME, 'own-build', 'nuxt'), say: (t) => appendFileSync(join(runDir, 'live.log'), `say: ${t}\n`),

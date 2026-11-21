@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { baselineRef, judge, compareFailures } from '../baseline.js';
-import { CHROME } from '../live.js';
+import { CHROME, startBrowser } from '../live.js';
 
 test('the code before a change', () => {
   assert.equal(baselineRef('commit', 'abc123'), 'abc123^');
@@ -15,7 +15,9 @@ test('the code before a change', () => {
 
 test('judging a failed check from its two replays', () => {
   assert.equal(judge({ ok: false, error: 'Expected /pre on :4100' }, { ok: false, error: 'Expected /pre on :5200' }).cause, 'known');
-  assert.equal(judge({ ok: false, error: 'Expected a form' }, { ok: false, error: 'Timeout' }).cause, 'unknown', 'failing differently before is no proof');
+  assert.equal(judge({ ok: false, error: 'Expected a form' }, { ok: false, error: 'Expected the list' }).cause, 'unknown', 'failing differently before is no proof');
+  assert.equal(judge({ ok: false, error: 'page.goto: Timeout 10000ms exceeded.' }, { ok: false, error: 'page.goto: Timeout 10000ms exceeded.' }).cause, 'unknown', 'two timeouts are no proof');
+  assert.equal(judge({ ok: false, error: 'took longer than 60s' }, { ok: true }).cause, 'unknown', 'a slow page is no regression either');
   assert.equal(judge({ ok: false }, { ok: true }).cause, 'regression');
   assert.equal(judge({ ok: true }, { ok: true }).cause, 'unknown', "a script that passes now didn't reproduce the failure");
   assert.equal(judge({ ok: false }, undefined).cause, 'unknown', 'no run before the change: no claim');
@@ -47,7 +49,10 @@ test('failures are sorted into already broken, broken by the change, and unconfi
   ];
   const by = (fs) => Object.fromEntries(fs.map((f) => [f.name, f]));
 
-  const a = by(await compareFailures(root, flows, { kind: 'commit', target: c2, runDir: mkdtempSync(join(tmpdir(), 'ut-run-')) }));
+  // As in a real run, the run's own browser is still open on the run folder.
+  const runDir = mkdtempSync(join(tmpdir(), 'ut-run-'));
+  const runBrowser = await startBrowser(runDir);
+  const a = by(await compareFailures(root, flows, { kind: 'commit', target: c2, runDir }).finally(() => runBrowser?.stop()));
   assert.equal(a.pre.status, 'known'); assert.equal(a.pre.cause, 'known');
   assert.equal(a.reg.status, 'fail'); assert.equal(a.reg.cause, 'regression');
   assert.equal(a.fine.cause, 'unknown'); assert.equal(a.fine.status, 'fail', "an unconfirmed failure stays a failure");
