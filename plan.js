@@ -113,6 +113,8 @@ export function readPlan(root) {
 }
 
 function writeJson(root, json) {
+  // Sign-up details belong only to a persona that signs up; switching it to another way in drops them.
+  if (Array.isArray(json?.personas)) json = { ...json, personas: json.personas.map(({ signUp, ...p }) => (p.signIn === 'signUp' ? { ...p, signUp } : p)) };
   const errors = validate(json);
   // Never leave a plan that fails its own schema: a learned line that doesn't fit is dropped, not saved broken.
   if (errors.length) throw new Error(`Not saved, the plan would break: ${errors[0]}`);

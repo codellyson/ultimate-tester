@@ -96,4 +96,8 @@ test('plan card edits are saved only when the plan stays valid', () => {
   assert.throws(() => replacePlan(dir, JSON.stringify({ version: 1 })), /Not saved/);
   saved = JSON.parse(readFileSync(join(dir, PLAN_JSON), 'utf8'));
   assert.equal(saved.start.command, P.start.command, 'refused edits change nothing');
+  setPlanFields(dir, { 'personas[0].signIn': 'signUp', 'personas[0].signUp': { url: '/signup', email: 'ut-{time}@example.test' } });
+  setPlanFields(dir, { 'personas[0].signIn': 'none' });
+  saved = JSON.parse(readFileSync(join(dir, PLAN_JSON), 'utf8'));
+  assert.equal(saved.personas[0].signUp, undefined, 'leaving sign-up drops its details instead of refusing the save');
 });
