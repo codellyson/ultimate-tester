@@ -101,3 +101,22 @@ test('a planned check missing from the verdict makes it unverified, never a pass
   assert.deepEqual(v.flows.map((f) => [f.name, f.status]), [['Login', 'pass'], ['Checkout', 'unverified']]);
   assert.equal(enforceEvidence({ status: 'pass', flows: [{ name: 'Login', status: 'pass', evidence: ['a.png'] }] }, [{ name: 'Login' }]).status, 'pass');
 });
+
+test('a run answers two questions, counted from its checks', async () => {
+  const { answers } = await import('../lib.js');
+  const d = (status) => ({ source: 'diff', status }), m = (status, cause) => ({ source: 'must-never-break', status, cause });
+  // The Khaime run: unit tests passed, editor checks couldn't run; two known problems, one skipped, two replays passed.
+  let a = answers([d('pass'), d('unverified'), d('unverified'), m('pass'), m('pass'), m('known'), m('known'), m('notrun')]);
+  assert.equal(a.change.text, "Passed 1 of 3 checks; 2 couldn't run."); assert.equal(a.change.status, 'unverified');
+  assert.equal(a.broke.text, 'No: 2 passed, 2 already broken before this change, 1 out of its reach.'); assert.equal(a.broke.status, 'pass');
+  a = answers([d('pass'), d('fail'), m('fail', 'regression'), m('fail', 'unknown'), m('pass')]);
+  assert.equal(a.change.text, 'Failed 1 of 2 checks, passed 1.');
+  assert.equal(a.broke.text, 'Yes: 1 check passed before this change and fails now; 1 more failed, not confirmed.');
+  a = answers([d('pass'), m('fail', 'unknown'), m('pass')]);
+  assert.equal(a.change.text, 'Passed its one check.'); assert.match(a.broke.text, /^Maybe: 1 check failed.*Others: 1 passed\.$/);
+  a = answers([d('unverified'), m('known'), m('notrun')]);
+  assert.equal(a.change.text, "Its one check couldn't run.");
+  assert.equal(a.broke.status, 'notrun'); assert.equal(a.broke.text, 'Nothing it could affect: 1 already broken before this change, 1 out of its reach.');
+  assert.equal(answers([m('pass')]).change.text, 'No checks of the change itself.');
+  assert.equal(answers([d('pass'), d('pass')]).broke.text, 'No must-never-break checks.');
+});

@@ -102,13 +102,15 @@ const tested = computed(() => {
 })
 // A plain-text report a coding agent can act on: verdict, what was tested, and each problem with its evidence.
 const copied = ref(false)
+// The run's two questions, answered by the engine from its checks: did the change do its job, did it break anything.
+const answerRows = computed(() => v.value?.answer ? [{ label: 'Your change', ...v.value.answer.change }, { label: 'Broke anything', ...v.value.answer.broke }] : null)
 // Tess got no evidence and nothing broke: the environment, not the code, is the likely problem.
 const retryFirst = computed(() => r.value.status === 'stopped' || (!!v.value && !fail.value && !r.value.shots.length))
 async function copyReport() {
   if (!v.value) { state.flash = "This test isn't finished, so there's no report to copy yet."; return }
   const app = state.apps.find((a) => a.id === state.appId)
   const dir = app ? `${app.root}/.ultimate-tester/runs/${r.value.id}` : ''
-  const lines = [`Ultimate Tester: ${verdict.value.lead}${verdict.value.em}`.trim(), tested.value, '', v.value.summary]
+  const lines = [`Ultimate Tester: ${verdict.value.lead}${verdict.value.em}`.trim(), tested.value, ...(answerRows.value ?? []).map((a) => `${a.label}: ${a.text}`), '', v.value.summary]
   for (const f of flows.value.filter((x) => x.status !== 'pass')) {
     lines.push('', `${statusOf(f.status).word.toUpperCase()}: ${f.name}`)
     if (f.steps?.length) lines.push(...f.steps.map((s, i) => `  ${i + 1}. ${s}`))
@@ -359,6 +361,13 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
         <p v-if="linkedApps" class="selectable mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-[var(--muted)]">
           <span v-for="a in linkedApps" :key="a.name" :title="a.why ?? undefined"><b class="font-medium text-[var(--ink)]">{{ a.name }}</b> · {{ appLine(a) }}</span>
         </p>
+        <!-- The two answers first (counted by the engine), then Tess's account of how she got them. -->
+        <dl v-if="finished && answerRows" class="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 max-w-[46em] text-[14px] leading-[1.5]">
+          <template v-for="row in answerRows" :key="row.label">
+            <dt class="flex items-center gap-2 font-medium whitespace-nowrap"><component :is="statusOf(row.status).icon" :class="[statusOf(row.status).cls, 'size-4 shrink-0']" aria-hidden="true" />{{ row.label }}</dt>
+            <dd class="selectable text-[var(--text-2)] text-pretty">{{ row.text }}</dd>
+          </template>
+        </dl>
         <!-- Tess, in her own words: the summary when she's done, her latest line while she works. -->
         <!-- Two lines of Tess by default, so the header stays calm; More shows the rest. -->
         <div class="mt-5 max-w-[46em] flex gap-3" aria-live="polite">

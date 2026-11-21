@@ -84,8 +84,39 @@ export function enforceEvidence(verdict, plan = []) {
   return { ...verdict, status, flows };
 }
 
+const checks = (n) => `${n} check${n === 1 ? '' : 's'}`;
+const listOf = (parts) => parts.filter(Boolean).join(', ');
+
+// The two questions a run answers, counted from its checks (no AI): did the change do what it should, and did it
+// break anything that worked before? Facts, not verdicts: "Passed 2 of 3 checks", never "works".
+// status uses the check statuses (pass, fail, unverified, notrun) so the app can show the same icons.
+export function answers(flows = []) {
+  const count = (fs, st) => fs.filter((f) => f.status === st).length;
+  const diff = flows.filter((f) => f.source !== 'must-never-break');
+  const n = diff.length, p = count(diff, 'pass'), f = count(diff, 'fail'), u = n - p - f;
+  const change = !n ? { status: 'notrun', short: 'not checked', text: 'No checks of the change itself.' }
+    : f ? { status: 'fail', short: 'failed', text: `Failed ${f} of ${checks(n)}${p ? `, passed ${p}` : ''}${u ? `, ${u} couldn't run` : ''}.` }
+    : !u ? { status: 'pass', short: 'passed', text: n === 1 ? 'Passed its one check.' : `Passed all ${checks(n)}.` }
+    : p ? { status: 'unverified', short: 'partly checked', text: `Passed ${p} of ${checks(n)}; ${u} couldn't run.` }
+    : { status: 'unverified', short: "couldn't check", text: n === 1 ? "Its one check couldn't run." : `None of its ${checks(n)} could run.` };
+
+  const mnb = flows.filter((f) => f.source === 'must-never-break');
+  const reg = mnb.filter((f) => f.status === 'fail' && f.cause === 'regression').length;
+  const unsure = mnb.filter((f) => f.status === 'fail' && f.cause !== 'regression').length;
+  const ok = count(mnb, 'pass'), known = count(mnb, 'known'), out = count(mnb, 'notrun'), cant = count(mnb, 'unverified');
+  const rest = listOf([ok && `${ok} passed`, known && `${known} already broken before this change`, out && `${out} out of its reach`, cant && `${cant} couldn't run`]);
+  const broke = reg ? { status: 'fail', short: `broke ${reg}`, text: `Yes: ${checks(reg)} passed before this change and ${reg === 1 ? 'fails' : 'fail'} now${unsure ? `; ${unsure} more failed, not confirmed` : ''}.` }
+    : unsure ? { status: 'fail', short: `maybe broke ${unsure}`, text: `Maybe: ${checks(unsure)} failed, and I couldn't confirm whether this change caused ${unsure === 1 ? 'it' : 'them'}${rest ? `. Others: ${rest}` : ''}.` }
+    : !mnb.length ? { status: 'notrun', short: 'not checked', text: 'No must-never-break checks.' }
+    : ok ? { status: 'pass', short: 'nothing broke', text: `No: ${rest}.` }
+    : cant ? { status: 'unverified', short: "couldn't tell", text: `Can't tell: ${rest}.` }
+    : { status: 'notrun', short: 'not checked', text: `Nothing it could affect: ${rest}.` };
+  return { change, broke };
+}
+
 export function renderReport(v, meta) {
   const lines = [`Ultimate Tester: ${v.status.toUpperCase()} — ${v.summary}`, ''];
+  if (v.answer) lines.splice(1, 0, `Your change: ${v.answer.change.text}`, `Broke anything: ${v.answer.broke.text}`);
   for (const f of v.flows) {
     lines.push(`- [${f.status}] ${f.name}`);
     if (f.status !== 'pass') {

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, appendFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shouldSkip, VERDICT_SCHEMA, enforceEvidence, renderReport, usageLabel, withPort, parsePersonas, recentRuns, withoutOurStopHook, addToSection, parseStart } from '../lib.js';
+import { shouldSkip, VERDICT_SCHEMA, enforceEvidence, renderReport, answers, usageLabel, withPort, parsePersonas, recentRuns, withoutOurStopHook, addToSection, parseStart } from '../lib.js';
 const PORT = Number(process.env.ULTIMATE_TESTER_PORT ?? 4600);
 import { startBrowser, freePort, useSession } from '../live.js';
 import { readPlan, addEnvironment, PLAN_FILES } from '../plan.js';
@@ -363,7 +363,8 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
     plan = [...replayFlows.map((r) => ({ name: r.name, source: r.source, status: 'pass', note: 'Replayed', replayed: true })), ...plan.filter((p) => !p.replayed && !replayFlows.some((r) => r.name === p.name))];
     writeFileSync(join(runDir, 'plan.json'), JSON.stringify(plan));
   }
-  const verdict = enforceEvidence(raw, plan);
+  const verdict = { ...enforceEvidence(raw, plan) };
+  verdict.answer = answers(verdict.flows);
   // Every check Tess performed leaves a replay for next time.
   try { saveReplays(root(), verdict.flows, basename(runDir)); } catch {}
   try { updateKnown(join(process.cwd(), STATE), verdict.flows, basename(runDir)); } catch {}
