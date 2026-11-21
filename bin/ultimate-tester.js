@@ -12,6 +12,7 @@ import { startBackends } from '../linked.js';
 import { listReplays, saveReplays, runReplays, startOwnApp } from '../replay.js';
 import { compareFailures } from '../baseline.js';
 import { signedOut, setupProblem } from '../preflight.js';
+import { readKnown, updateKnown, knownLines, unreportedFlows, sameCheck } from '../known.js';
 import { sessionFile } from '../actions.js';
 import { addApp, readSettings } from '../apps.js';
 
@@ -265,9 +266,11 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   let againNames = [];
   if (replayFrom && /^[\w-]+$/.test(replayFrom)) { try { againNames = JSON.parse(readFileSync(join(runsDir, replayFrom, 'verdict.json'), 'utf8')).flows.map((f) => f.name); } catch {} }
   const mnb = testPlan.json?.mustNeverBreak?.map((m) => m.check) ?? null;
-  const wanted = listReplays(root()).filter((r) => againNames.includes(r.name) || (r.source === 'must-never-break' && (!mnb || mnb.includes(r.name))));
+  // Known problems aren't replayed: opening one can set the breakage off again for every check after it.
+  const known = readKnown(join(process.cwd(), STATE));
+  const wanted = listReplays(root()).filter((r) => !known[r.name] && (againNames.includes(r.name) || (r.source === 'must-never-break' && (!mnb || mnb.some((m) => sameCheck(r.name, m))))));
   const noBrowser = /^- Browser:\s*not needed/im.test(testPlan.text);
-  let shared = null, own = null, replayed = [];
+  let shared = null, own = null, replayed = [], dirty = false;
   const personaList = parsePersonas(testPlan.text);
   const sessionFor = (key) => { const p = personaList.find((x) => x.key === key); return p?.signIn ? sessionFile(join(process.cwd(), STATE), key, personaList) : null; };
   const backendUrls = Object.fromEntries(linked.apps.filter((a) => a.url).map((a) => [a.name, a.url]));
@@ -287,18 +290,26 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
     const items = wanted.map((r) => ({ name: r.name, source: r.source ?? 'diff', status: 'running', note: 'Replaying', replayed: true }));
     writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items));
     try {
-      replayed = await runReplays(wanted, {
-        endpoint: shared.endpoint, base: own.url, runDir,
-        backends: backendUrls, sessionFor,
-        onEach: (res) => { const it = items.find((i) => i.name === res.name); Object.assign(it, { status: res.ok ? 'pass' : 'running', note: res.ok ? `Replayed. ${res.notes.at(-1) ?? ''}`.trim() : 'Replay failed; Tess will look again' }); writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items)); },
-      });
+      // One at a time: a failed replay can leave the copy broken (a dev server stuck on a build error), so the
+      // next one gets it restarted, and so does Tess.
+      for (const w of wanted) {
+        if (dirty) { await own.stop(); own = await startOwnApp(root(), port, runDir, linked.env, join(HOME, 'own-build', 'nuxt')); dirty = false; if (!own?.url) break; }
+        const [res] = await runReplays([w], { endpoint: shared.endpoint, base: own.url, runDir, backends: backendUrls, sessionFor, onEach: (res) => { const it = items.find((i) => i.name === res.name); Object.assign(it, { status: res.ok ? 'pass' : 'running', note: res.ok ? `Replayed. ${res.notes.at(-1) ?? ''}`.trim() : 'Replay failed' }); writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items)); } });
+        replayed.push(res);
+        if (!res.ok) dirty = true;
+      }
     } catch (e) { appendFileSync(join(runDir, 'live.log'), `say: I couldn't run the saved replays (${e.message.split('\n')[0]}), so I'll check everything myself.\n`); }
   }
   const passedR = replayed.filter((r) => r.ok), failedR = replayed.filter((r) => !r.ok);
+  if (dirty || !own?.url) {
+    await own?.stop?.();
+    own = await startOwnApp(root(), port, runDir, linked.env, join(HOME, 'own-build', 'nuxt'));
+    if (!own?.url) { linked.stop(); shared?.stop(); const verdict = { status: 'unverified', setup: 'broken', summary: `I didn't test anything, because the test setup is broken: the app didn't start again after the saved checks. Nothing is known about the change yet.`, flows: [] }; writeFileSync(join(runDir, 'verdict.json'), JSON.stringify(verdict, null, 2)); return { status: 'unverified', report: `Ultimate Tester: SETUP BROKEN — ${verdict.summary}` }; }
+  }
   const replayFlows = passedR.map((r) => ({ name: r.name, status: 'pass', source: r.source ?? 'diff', persona: r.persona ?? undefined, evidence: [join(runDir, r.shot)], actual: r.notes.join(' ') || 'Replayed; every step passed.', replayed: true }));
   const replayedText = !replayed.length ? 'No checks were replayed this time.' : [
     passedR.length ? `These checks already passed by replay just now; don't check them again and don't list them in plan.json or the verdict: ${passedR.map((r) => `"${r.name}"`).join(', ')}.` : '',
-    failedR.length ? `These replays failed. Check each one yourself as a normal flow with the same name, say whether the app is broken or the replay was out of date, and give a new replay either way:\n${failedR.map((r) => `  - "${r.name}": ${r.error}`).join('\n')}` : '',
+    failedR.length ? `These replays failed. Check yourself, as a normal flow with the same name, only the ones this change could affect; say whether the app is broken or the replay was out of date, and give a new replay either way. Leave the others out of plan.json and the verdict: the engine repeats them on the code from before this change.\n${failedR.map((r) => `  - "${r.name}": ${r.error}`).join('\n')}` : '',
   ].filter(Boolean).join('\n') + `\n- Your copy of the app is already running at ${own.url} (port {{PORT}}); the engine started it and checked the sign-ins. Use it; don't start another and don't stop it.`;
   const prompt = readFileSync(join(HOME, 'prompt.md'), 'utf8')
     .replace('{{REPLAYED}}', () => replayedText)
@@ -313,6 +324,7 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
     .replaceAll('{{RUN_DIR}}', () => runDir)
     .replace('{{NOTE}}', () => note.trim() || 'None.')
     .replace('{{HISTORY}}', () => recentRuns(past))
+    .replace('{{KNOWN}}', () => knownLines(known))
     .replace('{{MODE}}', change.mode)
     .replace('{{MESSAGE}}', () => change.message)
     .replace('{{DIFF}}', () => change.diff.slice(0, 200_000)); // shortcut: huge diffs are cut, upgrade to per-file summaries if it bites
@@ -325,6 +337,7 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   try {
     if (allReplayed) raw = { status: 'pass', summary: `I replayed all ${passedR.length} checks from the last test and every one passed, so I didn't need to look again.`, flows: [] };
     else ({ verdict: raw, costUsd } = await runTester(prompt, runDir, shared));
+    raw = { ...raw, flows: [...(raw.flows ?? []), ...unreportedFlows(raw, { failed: failedR.map((r) => ({ ...r, code: wanted.find((w) => w.name === r.name)?.code, shot: join(runDir, r.shot) })), passed: passedR.map((r) => r.name), known })] };
     // A must-never-break check that failed: was it already broken before this change? Asked while the backends still run.
     if (raw.flows?.some((f) => f.status === 'fail' && f.source === 'must-never-break')) {
       await own?.stop?.(); // tools like Next.js run one dev server per folder; the comparison starts its own
@@ -353,6 +366,7 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   const verdict = enforceEvidence(raw, plan);
   // Every check Tess performed leaves a replay for next time.
   try { saveReplays(root(), verdict.flows, basename(runDir)); } catch {}
+  try { updateKnown(join(process.cwd(), STATE), verdict.flows, basename(runDir)); } catch {}
   const usage = usageLabel({ ...billing(), costUsd });
   const report = renderReport(verdict, { runDir, durationS: Math.round((Date.now() - started) / 1000), usage });
   writeFileSync(join(runDir, 'verdict.json'), JSON.stringify({ ...verdict, costUsd, usage, model: MODEL, durationMs: Date.now() - started }, null, 2));

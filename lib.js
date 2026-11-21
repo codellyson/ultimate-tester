@@ -14,6 +14,8 @@ export const VERDICT_SCHEMA = {
   properties: {
     status: { enum: ['pass', 'fail', 'unverified'] },
     summary: { type: 'string' },
+    // Must-never-break checks left out because this change can't reach them, each with why.
+    skipped: { type: 'array', items: { type: 'object', required: ['name', 'why'], properties: { name: { type: 'string' }, why: { type: 'string' } } } },
     flows: {
       type: 'array',
       items: {

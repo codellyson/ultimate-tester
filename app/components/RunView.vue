@@ -25,7 +25,7 @@ const pass = computed(() => count('pass'))
 const fail = computed(() => count('fail'))
 const unk = computed(() => count('unverified'))
 const known = computed(() => count('known'))
-const todo = computed(() => plan.value.length - pass.value - fail.value - unk.value - known.value)
+const todo = computed(() => plan.value.length - pass.value - fail.value - unk.value - known.value - count('notrun'))
 
 // Which persona a "can't check" is waiting on: its own, or one named in Tess's note ("needs Store owner with B2B").
 function blockedBy(p: PlanItem): Persona | null {
