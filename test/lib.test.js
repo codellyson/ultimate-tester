@@ -105,7 +105,7 @@ test('a planned check missing from the verdict makes it unverified, never a pass
 test('a run answers two questions, counted from its checks', async () => {
   const { answers } = await import('../lib.js');
   const d = (status) => ({ source: 'diff', status }), m = (status, cause) => ({ source: 'must-never-break', status, cause });
-  // The Khaime run: unit tests passed, editor checks couldn't run; two known problems, one skipped, two replays passed.
+  // A real run: unit tests passed, editor checks couldn't run; two known problems, one skipped, two replays passed.
   let a = answers([d('pass'), d('unverified'), d('unverified'), m('pass'), m('pass'), m('known'), m('known'), m('notrun')]);
   assert.equal(a.change.text, "Passed 1 of 3 checks; 2 couldn't run."); assert.equal(a.change.status, 'unverified');
   assert.equal(a.broke.text, 'No: 2 passed, 2 already broken before this change, 1 out of its reach.'); assert.equal(a.broke.status, 'pass');

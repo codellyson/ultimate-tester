@@ -1,6 +1,6 @@
 # Replay: rerun checks from cached steps instead of asking Tess every time
 
-Status: design, not built. Written 2026-11-20.
+Status: built (0.2.0). Written 2026-11-20 as a design; how replays fit into a run now is in how-a-run-decides.md.
 
 ## The problem
 
