@@ -53,6 +53,7 @@ export async function speak(text, voice = DEFAULT_VOICE) {
   if (!tts) return null;
   const clean = String(text ?? '').replace(/`/g, '').trim().slice(0, 600);
   if (!clean) return null;
-  const audio = await tts.generate(clean, { voice });
+  // A little faster than her natural pace, so a line is over before the test has moved far past it.
+  const audio = await tts.generate(clean, { voice, speed: 1.15 });
   return Buffer.from(audio.toWav());
 }

@@ -23,22 +23,31 @@ if (typeof window !== 'undefined') {
   setTimeout(() => (on.value ? prepare() : poll()), 1000)
 }
 
-// Kokoro playback: one line at a time; a newer line replaces any that is still waiting, so the voice never lags.
+// Kokoro playback that keeps up with the test. A line is made into speech the moment it arrives (that takes a
+// second or two), and only the newest line is ever spoken: an older one still being made is dropped, and one still
+// playing is cut short unless it's nearly done, so the voice stays with what's on screen.
+const NEARLY_DONE_S = 1.2
 let playing: HTMLAudioElement | null = null
-let waiting: string | null = null
+let latest = 0
+function halt() { if (playing) { playing.pause(); URL.revokeObjectURL(playing.src); playing = null } }
 async function sayKokoro(text: string, interrupt: boolean) {
-  if (interrupt && playing) { playing.pause(); playing = null }
-  if (playing) { waiting = text; return }
+  const id = ++latest
   let res: Response
   try { res = await fetch('/api/voice/say', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }) } catch { return }
-  if (!res.ok) return
+  if (!res.ok || id !== latest) return
   const url = URL.createObjectURL(await res.blob())
+  if (id !== latest) { URL.revokeObjectURL(url); return }
   const audio = new Audio(url)
-  playing = audio
-  const next = () => { URL.revokeObjectURL(url); if (playing === audio) playing = null; const w = waiting; waiting = null; if (w && on.value) sayKokoro(w, false) }
-  audio.onended = next
-  audio.onerror = next
-  audio.play().catch(next)
+  const start = () => {
+    if (id !== latest || !on.value) { URL.revokeObjectURL(url); return }
+    halt()
+    playing = audio
+    audio.onended = audio.onerror = () => { if (playing === audio) { URL.revokeObjectURL(url); playing = null } }
+    audio.play().catch(() => audio.onended?.(new Event('ended')))
+  }
+  const left = playing ? playing.duration - playing.currentTime : 0
+  if (playing && !interrupt && left <= NEARLY_DONE_S) playing.addEventListener('ended', start, { once: true })
+  else start()
 }
 
 export function useVoice() {
@@ -56,7 +65,7 @@ export function useVoice() {
     if (!on.value || !clean) return
     if (status.value.state === 'ready') sayKokoro(clean, interrupt)
   }
-  function stop() { waiting = null; if (playing) { playing.pause(); playing = null } }
+  function stop() { latest++; halt() }
   // Why nothing is spoken while the voice is on, or null when it's ready (or off).
   const unavailable = computed(() => !on.value || status.value.state === 'ready' ? null
     : status.value.state === 'error' ? `Voice not available: ${status.value.message}`
