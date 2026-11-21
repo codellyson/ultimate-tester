@@ -24,6 +24,7 @@ NOTES="$NOTES" SIG=$(cat "$B/macos/Ultimate Tester.app.tar.gz.sig") VERSION="$VE
 
 # `gh release create` asks for the "workflow" scope here, so git pushes the tag and the API makes the release.
 git tag "$TAG" && git push -q origin "$TAG"
-gh api "repos/$REPO/releases" -f tag_name="$TAG" -f name="Ultimate Tester $VERSION" -f body="$NOTES" >/dev/null
+# GitHub can answer 404 for a moment right after the tag is pushed, so try a few times.
+for try in 1 2 3 4 5; do gh api "repos/$REPO/releases" -f tag_name="$TAG" -f name="Ultimate Tester $VERSION" -f body="$NOTES" >/dev/null && break; [ "$try" = 5 ] && exit 1; sleep 5; done
 gh release upload "$TAG" -R "$REPO" "$OUT/UltimateTester.dmg" "$OUT/UltimateTester.app.tar.gz" "$OUT/latest.json"
 echo "Released $TAG: installed copies see it at their next launch."
