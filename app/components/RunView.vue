@@ -116,6 +116,7 @@ async function copyReport() {
     if (f.steps?.length) lines.push(...f.steps.map((s, i) => `  ${i + 1}. ${s}`))
     if (f.expected) lines.push(`  Expected: ${f.expected}`)
     if (f.actual) lines.push(`  Actual: ${f.actual}`)
+    if (f.tried) lines.push(`  Another way in: ${f.tried}`)
     for (const e of f.evidence ?? []) lines.push(`  Evidence: ${e.startsWith('/') || !dir ? e : `${dir}/${e.split('/').at(-1)}`}`)
   }
   try {
@@ -472,6 +473,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
           <button class="btn-blue shrink-0" @click="openSettings()">Sign in</button>
         </div>
         <p v-else-if="!live && saw && !startFail && !reqProof" class="selectable text-[14px] leading-[1.55] text-[var(--text-2)] text-pretty"><b class="font-semibold text-[var(--ink)]">{{ selItem?.status === 'unverified' ? "Why it didn't run:" : 'What I saw:' }}</b> {{ saw }}</p>
+        <p v-if="!live && selFlow?.tried" class="selectable text-[14px] leading-[1.55] text-[var(--text-2)] text-pretty"><b class="font-semibold text-[var(--ink)]">Another way in:</b> {{ selFlow.tried }}</p>
         <template v-if="!live && selFlow && selFlow.status !== 'pass'">
           <p v-if="selFlow.causeWhy" class="selectable text-[14px] leading-[1.55] text-[var(--text-2)] text-pretty"><b class="font-semibold text-[var(--ink)]">Before this change:</b> {{ selFlow.causeWhy }}</p>
           <p v-if="selFlow.expected && !reqProof" class="selectable text-[13px] text-[var(--muted)]">Expected: {{ selFlow.expected }}</p>

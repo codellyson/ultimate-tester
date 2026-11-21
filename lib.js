@@ -37,6 +37,8 @@ export const VERDICT_SCHEMA = {
           source: { type: 'string' },
           // A script the engine can rerun later without Tess (see replay.js), for a check she actually performed.
           replay: { type: 'string' },
+          // A blocked check of the change: the other route Tess tried, and how it went.
+          tried: { type: 'string' },
           // Set only on an unverified check that couldn't run because something it needs doesn't exist yet.
           needs: { type: 'string' },
           setupBy: { enum: ['tess', 'person'] },
@@ -124,6 +126,7 @@ export function renderReport(v, meta) {
       if (f.expected) lines.push(`    expected: ${f.expected}`);
       if (f.actual) lines.push(`    actual: ${f.actual}`);
     }
+    if (f.tried) lines.push(`    another way in: ${f.tried}`);
     for (const e of f.evidence ?? []) lines.push(`    evidence: ${e}`);
   }
   lines.push('', `run: ${meta.runDir}  (${meta.durationS}s, ${meta.usage})`);
