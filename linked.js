@@ -2,12 +2,13 @@
 // (from that backend's own plan, on its own free port) and tell Tess how to point the frontend at it.
 // A backend that isn't on this Mac, or won't start, follows the plan's whenMissing: the dev one, or stop.
 import { execFileSync, spawn } from 'node:child_process';
-import { openSync } from 'node:fs';
+import { openSync, realpathSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { findAppByRepo } from './apps.js';
 import { readPlan } from './plan.js';
 import { parseStart, withPort } from './lib.js';
 import { freePort } from './live.js';
+import { recordStarted, forgetStarted } from './started.js';
 
 const git = (root, ...args) => { try { return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; } };
 const home = (p) => p.replace(/^\/Users\/[^/]+/, '~');
@@ -48,6 +49,7 @@ export async function startBackends(root, runDir, { start = true } = {}) {
           const { PORT, HOST, NITRO_PORT, NITRO_HOST, ...env } = process.env;
           const child = spawn('sh', ['-c', command], { cwd: found.root, detached: true, stdio: ['ignore', log, log], env });
           procs.push(child);
+          recordStarted(child.pid, port, { cwd: realpathSync(found.root) });
           const seconds = bp.json?.start?.readySeconds ?? 90;
           if (await waitFor(ready, seconds * 1000)) url = ready.match(/^https?:\/\/[^/]+/)[0];
           else why = `${found.name} didn't answer at ${ready} within ${seconds} seconds (its log: ${join(runDir, `backend-${b.name}.log`)})`;
@@ -70,7 +72,7 @@ export async function startBackends(root, runDir, { start = true } = {}) {
       lines.push(`- ${b.name}: not your local copy (${why}). Leave ${b.env} as it is in the app's env file (the dev backend), and say in the summary that ${b.name} was the dev one, not local code.`);
     }
   }
-  const stop = () => { for (const p of procs) { try { process.kill(-p.pid, 'SIGTERM'); } catch {} } };
+  const stop = () => { for (const p of procs) { forgetStarted(p.pid); try { process.kill(-p.pid, 'SIGTERM'); } catch {} } };
   if (blocked) stop();
   return { apps, lines, diffs, env, blocked, stop, linked: links.length > 0 };
 }

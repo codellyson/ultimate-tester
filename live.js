@@ -1,6 +1,7 @@
 // Runs the browser the tester drives, and streams its screen into the run folder
 // (live.jpg + live.json) so the Ultimate Tester window can show it live.
 import { spawn } from 'node:child_process';
+import { recordStarted, forgetStarted } from './started.js';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
@@ -73,6 +74,7 @@ export async function useSession(endpoint, file) {
 export async function startBrowser(runDir) {
   if (!CHROME) return null;
   const { chrome, endpoint } = await launch(join(runDir, 'chrome-profile'));
+  recordStarted(chrome.pid, join(runDir, 'chrome-profile'), { group: false });
 
   let stopped = false, ws = null, attachedTo = null, offline = false;
   const frame = join(runDir, 'live.jpg');
@@ -110,6 +112,6 @@ export async function startBrowser(runDir) {
   stream();
   return {
     endpoint,
-    stop: () => { stopped = true; ws?.close(); chrome.kill(); },
+    stop: () => { stopped = true; ws?.close(); forgetStarted(chrome.pid); chrome.kill(); },
   };
 }

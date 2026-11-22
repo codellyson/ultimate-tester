@@ -2,7 +2,7 @@
 // A replay is one small file per check in the repo's .ultimate-tester/replays/ (git-ignored, this Mac only).
 // Playwright isn't shipped with the app; the first replay installs it once (a few MB) into ~/.ultimate-tester/replay.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, openSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, openSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { readPlan } from './plan.js';
 import { parseStart, withPort } from './lib.js';
 import { useSession } from './live.js';
+import { recordStarted, forgetStarted } from './started.js';
 
 const HOME = process.env.ULTIMATE_TESTER_HOME ?? join(homedir(), '.ultimate-tester');
 const PW_DIR = join(HOME, 'replay');
@@ -77,6 +78,7 @@ export async function startOwnApp(root, port, runDir, env = {}, ownBuild = null)
   const start = (cmd) => new Promise((resolve) => {
     const out = openSync(log, 'a');
     const child = spawn('sh', ['-c', cmd], { cwd: root, detached: true, stdio: ['ignore', out, out], env: { ...base, ...env } });
+    recordStarted(child.pid, port, { cwd: realpathSync(root) });
     let exited = false;
     child.on('exit', () => { exited = true; resolve({ child, ok: false }); });
     waitFor(url, (plan.json?.start?.readySeconds ?? 120) * 1000, () => exited).then((ok) => resolve({ child, ok }));
@@ -85,6 +87,7 @@ export async function startOwnApp(root, port, runDir, env = {}, ownBuild = null)
   if (!r.ok && ownBuild && /Another Nuxt (dev server|build) is already|NUXT_IGNORE_LOCK/i.test(readFileSync(log, 'utf8'))) r = await start(`${command} --extends ${JSON.stringify(ownBuild)}`);
   // Resolves once the app's whole process group is gone, so another copy can start from the same folder.
   const stop = async () => {
+    forgetStarted(r.child.pid);
     try { process.kill(-r.child.pid, 'SIGTERM'); } catch { return; }
     for (let i = 0; i < 50; i++) { try { process.kill(-r.child.pid, 0); } catch { return; } await new Promise((ok) => setTimeout(ok, 200)); }
   };

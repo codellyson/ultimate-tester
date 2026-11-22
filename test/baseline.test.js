@@ -4,8 +4,10 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { baselineRef, judge, compareFailures } from '../baseline.js';
-import { CHROME, startBrowser } from '../live.js';
+// Ultimate Tester's own copies go in a throwaway home, not the real ~/.ultimate-tester.
+process.env.ULTIMATE_TESTER_HOME = mkdtempSync(join(tmpdir(), 'ut-home-'));
+const { baselineRef, judge, compareFailures } = await import('../baseline.js');
+const { CHROME, startBrowser } = await import('../live.js');
 
 test('the code before a change', () => {
   assert.equal(baselineRef('commit', 'abc123'), 'abc123^');
@@ -66,5 +68,5 @@ test('failures are sorted into already broken, broken by the change, and unconfi
   assert.match(b.pre.causeWhy, /before this change/);
 
   assert.ok(c0);
-  assert.equal(git('worktree', 'list').split('\n').length, 1, 'the copy from before the change is removed afterwards');
+  assert.equal(git('worktree', 'list').split('\n').length, 2, 'the copy from before the change is kept for next time, apart from your folder');
 });

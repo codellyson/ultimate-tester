@@ -11,6 +11,8 @@ import { readPlan, addEnvironment, PLAN_FILES } from '../plan.js';
 import { startBackends } from '../linked.js';
 import { listReplays, saveReplays, runReplays, startOwnApp } from '../replay.js';
 import { compareFailures } from '../baseline.js';
+import { clearLeftovers, stopOwnStarted, recordStarted, forgetStarted } from '../started.js';
+import { prepare } from '../workspace.js';
 import { signedOut, setupProblem } from '../preflight.js';
 import { readKnown, updateKnown, knownLines, unreportedFlows, sameCheck } from '../known.js';
 import { sessionFile } from '../actions.js';
@@ -52,7 +54,8 @@ function describe(ev) {
 }
 
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
-const root = () => git('rev-parse', '--show-toplevel');
+// The app's repo. Tess works in Ultimate Tester's own copy of it, so commands she runs are told the real one.
+const root = () => process.env.ULTIMATE_TESTER_ROOT || git('rev-parse', '--show-toplevel');
 
 // commit: a sha to test, or null for uncommitted changes. range: "base..head", everything about to ship.
 function collectChange(commit, range) {
@@ -74,7 +77,8 @@ function collectChange(commit, range) {
   return { mode: 'uncommitted changes', files: [...tracked, ...untracked].filter((f) => !PLAN_FILES.includes(f)), diff, message: '(not committed yet)' };
 }
 
-async function runTester(prompt, runDir, shared = null) {
+// cwd: where Tess works; for a test, Ultimate Tester's own copy of the app.
+async function runTester(prompt, runDir, shared = null, cwd = process.cwd()) {
   // A backend with no pages ("- Browser: not needed" under Start) is tested with requests only: no browser at all.
   const noBrowser = /^- Browser:\s*not needed/im.test(readPlan(root()).text);
   // A browser already opened for replays is reused, and left for the caller to stop.
@@ -94,9 +98,10 @@ async function runTester(prompt, runDir, shared = null) {
   ];
   return new Promise((resolve) => {
     // ULTIMATE_TESTER_CDP lets `ultimate-tester as <persona>` (run by the tester) reach this browser.
-    const env = { ...process.env, ULTIMATE_TESTER_CHILD: '1', ...(browser ? { ULTIMATE_TESTER_CDP: browser.endpoint } : {}) };
+    const env = { ...process.env, ULTIMATE_TESTER_CHILD: '1', ULTIMATE_TESTER_ROOT: root(), ...(browser ? { ULTIMATE_TESTER_CDP: browser.endpoint } : {}) };
     // Its own process group, so Stop can end Tess and everything she started (browser tools, the app).
-    const child = spawn('claude', args, { env, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+    const child = spawn('claude', args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+    recordStarted(child.pid, basename(runDir));
     const stop = () => {
       writeFileSync(join(runDir, 'stopped'), new Date().toISOString());
       try { process.kill(-child.pid, 'SIGTERM'); } catch {}
@@ -123,6 +128,7 @@ async function runTester(prompt, runDir, shared = null) {
     child.stderr.on('data', (d) => (err += d));
     const timer = setTimeout(() => child.kill('SIGTERM'), TIMEOUT_MS);
     child.on('close', (code) => {
+      forgetStarted(child.pid);
       clearTimeout(timer);
       process.off('SIGTERM', stop);
       process.off('SIGINT', stop);
@@ -228,6 +234,9 @@ async function setupEnv(source) {
 // Returns { status, report } — status is pass | fail | unverified | skip.
 async function run({ commit = null, range = null, dedupe = false, note = '', replayFrom = null } = {}) {
   process.chdir(root());
+  clearLeftovers();
+  // Stop (SIGTERM) can come at any stage, not only while Tess works: the apps this run started go down with it.
+  process.once('SIGTERM', () => { stopOwnStarted(); setImmediate(() => process.exit(143)); });
   const testPlan = readPlan(root());
   if (!testPlan.format) return { status: 'skip', report: `No ${PROFILE}. Run: ultimate-tester init` };
   if (testPlan.errors.length) return { status: 'skip', report: `Ultimate Tester: the test plan has problems, so nothing was tested.\n${testPlan.errors.map((e) => `- ${e}`).join('\n')}` };
@@ -251,6 +260,14 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   // Stop (from the window, whoever started this run) signals this process; see runTester.
   writeFileSync(join(runDir, 'pid'), String(process.pid));
   writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: change.mode, message: change.message, files: change.files, note, kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit ?? null }));
+  // Isolation: everything runs in Ultimate Tester's own copy of the app, set to exactly the code under test.
+  appendFileSync(join(runDir, 'live.log'), `say: Setting up my own copy of ${basename(root())} with the code to test.\n`);
+  let work;
+  try { work = await prepare(root(), { ref: range ? (String(range).split('..')[1] || 'HEAD') : commit ?? 'HEAD', changes: !range && !commit }); } catch (e) {
+    const verdict = { status: 'unverified', setup: 'broken', summary: `I didn't test anything, because the test setup is broken: I couldn't set up my own copy of the app (${String(e.message).split('\n')[0].slice(0, 300)}). Nothing is known about the change yet.`, flows: [] };
+    writeFileSync(join(runDir, 'verdict.json'), JSON.stringify(verdict, null, 2));
+    return { status: 'unverified', report: `Ultimate Tester: SETUP BROKEN — ${verdict.summary}` };
+  }
   const port = await freePort();
   // Linked backends first: your local copies, started from their own plans, so the frontend calls your code.
   const linked = await startBackends(root(), runDir);
@@ -275,7 +292,7 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   const sessionFor = (key) => { const p = personaList.find((x) => x.key === key); return p?.signIn ? sessionFile(join(process.cwd(), STATE), key, personaList) : null; };
   const backendUrls = Object.fromEntries(linked.apps.filter((a) => a.url).map((a) => [a.name, a.url]));
   // Preflight: the engine starts the app and tries each saved sign-in before Tess spends a run on it.
-  own = await startOwnApp(root(), port, runDir, linked.env, join(HOME, 'own-build', 'nuxt'));
+  own = await startOwnApp(work, port, runDir, linked.env, join(HOME, 'own-build', 'nuxt'));
   shared = own?.url && !noBrowser ? await startBrowser(runDir) : null;
   const out = shared ? await signedOut(personaList, { endpoint: shared.endpoint, base: own.url, runDir, sessionFor, plan: testPlan.json }).catch(() => []) : [];
   const problem = setupProblem({ app: own, personas: personaList, out, log: join(runDir, 'app.log') });
@@ -293,8 +310,12 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
       // One at a time: a failed replay can leave the copy broken (a dev server stuck on a build error), so the
       // next one gets it restarted, and so does Tess.
       for (const w of wanted) {
-        if (dirty) { await own.stop(); own = await startOwnApp(root(), port, runDir, linked.env, join(HOME, 'own-build', 'nuxt')); dirty = false; if (!own?.url) break; }
-        const [res] = await runReplays([w], { endpoint: shared.endpoint, base: own.url, runDir, backends: backendUrls, sessionFor, onEach: (res) => { const it = items.find((i) => i.name === res.name); Object.assign(it, { status: res.ok ? 'pass' : 'running', note: res.ok ? `Replayed. ${res.notes.at(-1) ?? ''}`.trim() : 'Replay failed' }); writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items)); } });
+        const restart = async () => { await own.stop(); own = await startOwnApp(work, port, runDir, linked.env, join(HOME, 'own-build', 'nuxt')); return !!own?.url; };
+        if (dirty) { dirty = false; if (!await restart()) break; }
+        const once = () => runReplays([w], { endpoint: shared.endpoint, base: own.url, runDir, backends: backendUrls, sessionFor, stepMs: 60_000, replayMs: 180_000, onEach: (res) => { const it = items.find((i) => i.name === res.name); Object.assign(it, { status: res.ok ? 'pass' : 'running', note: res.ok ? `Replayed. ${res.notes.at(-1) ?? ''}`.trim() : 'Replay failed' }); writeFileSync(join(runDir, 'plan.json'), JSON.stringify(items)); } });
+        let [res] = await once();
+        // A failure counts only if it happens twice: the first can be the app compiling a page for the first time.
+        if (!res.ok && await restart()) [res] = await once();
         replayed.push(res);
         if (!res.ok) dirty = true;
       }
@@ -303,14 +324,14 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   const passedR = replayed.filter((r) => r.ok), failedR = replayed.filter((r) => !r.ok);
   if (dirty || !own?.url) {
     await own?.stop?.();
-    own = await startOwnApp(root(), port, runDir, linked.env, join(HOME, 'own-build', 'nuxt'));
+    own = await startOwnApp(work, port, runDir, linked.env, join(HOME, 'own-build', 'nuxt'));
     if (!own?.url) { linked.stop(); shared?.stop(); const verdict = { status: 'unverified', setup: 'broken', summary: `I didn't test anything, because the test setup is broken: the app didn't start again after the saved checks. Nothing is known about the change yet.`, flows: [] }; writeFileSync(join(runDir, 'verdict.json'), JSON.stringify(verdict, null, 2)); return { status: 'unverified', report: `Ultimate Tester: SETUP BROKEN — ${verdict.summary}` }; }
   }
   const replayFlows = passedR.map((r) => ({ name: r.name, status: 'pass', source: r.source ?? 'diff', persona: r.persona ?? undefined, evidence: [join(runDir, r.shot)], actual: r.notes.join(' ') || 'Replayed; every step passed.', replayed: true }));
   const replayedText = !replayed.length ? 'No checks were replayed this time.' : [
     passedR.length ? `These checks already passed by replay just now; don't check them again and don't list them in plan.json or the verdict: ${passedR.map((r) => `"${r.name}"`).join(', ')}.` : '',
     failedR.length ? `These replays failed. Check yourself, as a normal flow with the same name, only the ones this change could affect; say whether the app is broken or the replay was out of date, and give a new replay either way. Leave the others out of plan.json and the verdict: the engine repeats them on the code from before this change.\n${failedR.map((r) => `  - "${r.name}": ${r.error}`).join('\n')}` : '',
-  ].filter(Boolean).join('\n') + `\n- Your copy of the app is already running at ${own.url} (port {{PORT}}); the engine started it and checked the sign-ins. Use it; don't start another and don't stop it.`;
+  ].filter(Boolean).join('\n') + `\n- Your copy of the app is already running at ${own.url} (port {{PORT}}); the engine started it and checked the sign-ins. Use it; don't start another and don't stop it.\n- You work in Ultimate Tester's own copy of this app, ${work}, set to exactly the code under test. Run commands (tests, the app) there, never in the developer's folder.`;
   const prompt = readFileSync(join(HOME, 'prompt.md'), 'utf8')
     .replace('{{REPLAYED}}', () => replayedText)
     .replace('{{BACKENDS}}', () => (linked.linked ? linked.lines.join('\n') : 'None. This app is tested on its own.'))
@@ -336,13 +357,13 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   const allReplayed = replayFrom && againNames.length && !failedR.length && againNames.every((n) => passedR.some((r) => r.name === n));
   try {
     if (allReplayed) raw = { status: 'pass', summary: `I replayed all ${passedR.length} checks from the last test and every one passed, so I didn't need to look again.`, flows: [] };
-    else ({ verdict: raw, costUsd } = await runTester(prompt, runDir, shared));
+    else ({ verdict: raw, costUsd } = await runTester(prompt, runDir, shared, work));
     raw = { ...raw, flows: [...(raw.flows ?? []), ...unreportedFlows(raw, { failed: failedR.map((r) => ({ ...r, code: wanted.find((w) => w.name === r.name)?.code, shot: join(runDir, r.shot) })), passed: passedR.map((r) => r.name), known })] };
     // A must-never-break check that failed: was it already broken before this change? Asked while the backends still run.
     if (raw.flows?.some((f) => f.status === 'fail' && f.source === 'must-never-break')) {
       await own?.stop?.(); // tools like Next.js run one dev server per folder; the comparison starts its own
       raw = { ...raw, flows: await compareFailures(root(), raw.flows, {
-        kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit, runDir, env: linked.env, backends: backendUrls, sessionFor,
+        kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit, runDir, nowDir: work, env: linked.env, backends: backendUrls, sessionFor,
         ownBuild: join(HOME, 'own-build', 'nuxt'), say: (t) => appendFileSync(join(runDir, 'live.log'), `say: ${t}\n`),
       }) };
       const known = raw.flows.filter((f) => f.status === 'known').length;
@@ -499,6 +520,7 @@ switch (cmdName) {
     // The Nuxt app is the engine: its Nitro server serves the page and the API on one local port.
     const server = join(HOME, '.output', 'server', 'index.mjs');
     if (!existsSync(server)) { console.error(`Not built yet. Run: npm run build (in ${HOME})`); process.exit(1); }
+    clearLeftovers(); // apps left running by runs that died (a quit, an update) would block the next test
     Object.assign(process.env, { PORT: String(PORT), HOST: '127.0.0.1', NITRO_HOST: '127.0.0.1', NITRO_PORT: String(PORT), UT_HOME: HOME });
     await import(server);
     console.log(`Ultimate Tester: http://localhost:${PORT}`);

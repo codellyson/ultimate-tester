@@ -2,13 +2,10 @@
 // the code as it is now and on the code from before the change. Failing on both means it was already broken
 // ("known"); failing only now means the change broke it. Checks of the change itself aren't compared: what a
 // change adds can't work before it.
-import { execFile, execFileSync } from 'node:child_process';
-import { promisify } from 'node:util';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { PLAN_FILES } from './plan.js';
 import { startOwnApp, runReplays } from './replay.js';
+import { prepare } from './workspace.js';
 import { startBrowser, freePort } from './live.js';
 
 // The code before the change: a commit's parent, a range's base, or the last commit for uncommitted changes.
@@ -33,33 +30,9 @@ export function judge(now, before) {
   return { cause: 'known', why: `It failed on the code from before this change too, so this change didn't cause it (${before.error}).` };
 }
 
-// Installs the packages that commit's own lockfile names (they may differ from today's). A linked node_modules
-// isn't enough: bundlers like Turbopack refuse packages from outside the folder they build.
-const INSTALL = [['pnpm-lock.yaml', 'pnpm', ['install', '--frozen-lockfile', '--prefer-offline']], ['yarn.lock', 'yarn', ['install', '--frozen-lockfile']],
-  ['package-lock.json', 'npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund']], ['bun.lock', 'bun', ['install', '--frozen-lockfile']], ['bun.lockb', 'bun', ['install', '--frozen-lockfile']]];
-async function install(dir) {
-  const m = INSTALL.find(([lock]) => existsSync(join(dir, lock)));
-  if (!m) return;
-  await promisify(execFile)(m[1], m[2], { cwd: dir, timeout: 10 * 60_000, env: { ...process.env, CI: '1' } });
-}
-
-// The code before the change in a folder of its own, with what running it needs but git doesn't hold.
-async function checkout(root, ref) {
-  const dir = mkdtempSync(join(tmpdir(), 'ut-baseline-'));
-  execFileSync('git', ['worktree', 'add', '--detach', '--force', dir, ref], { cwd: root, stdio: 'ignore' });
-  for (const f of readdirSync(root)) {
-    if ((PLAN_FILES.includes(f) || /^\.env/.test(f)) && !existsSync(join(dir, f)) && statSync(join(root, f)).isFile()) copyFileSync(join(root, f), join(dir, f));
-  }
-  const remove = () => { try { execFileSync('git', ['worktree', 'remove', '--force', dir], { cwd: root, stdio: 'ignore' }); } catch { rmSync(dir, { recursive: true, force: true }); } };
-  if (existsSync(join(root, 'package.json'))) {
-    try { await install(dir); } catch (e) { remove(); throw new Error(`installing its packages failed: ${String(e.stderr || e.message).trim().split('\n').pop()}`); }
-  }
-  return { dir, remove };
-}
-
-// flows: the verdict's flows. now: { url } of a copy of the app already running this run's code, if any.
+// flows: the verdict's flows. nowDir: the folder holding the code under test (Ultimate Tester's own copy).
 // Returns the flows with each compared failure turned into "known" or kept as "fail", with cause and why.
-export async function compareFailures(root, flows, { kind, target, runDir, env = {}, backends = {}, sessionFor, ownBuild, say = () => {} }) {
+export async function compareFailures(root, flows, { kind, target, runDir, nowDir = root, env = {}, backends = {}, sessionFor, ownBuild, say = () => {} }) {
   const failed = flows.filter((f) => f.status === 'fail' && f.source === 'must-never-break');
   if (!failed.length) return flows;
   const scripts = failed.filter((f) => f.replay?.trim()).map((f) => ({ name: f.name, source: f.source, persona: f.persona ?? null, code: f.replay }));
@@ -72,7 +45,7 @@ export async function compareFailures(root, flows, { kind, target, runDir, env =
     const browser = await startBrowser(join(runDir, 'recheck'));
     if (browser) stops.push(() => browser.stop());
     let base = null;
-    try { base = await checkout(root, baselineRef(kind, target)); stops.push(base.remove); } catch (e) { say(`I couldn't set up the code from before this change: ${e.message}.`); }
+    try { base = { dir: await prepare(root, { ref: baselineRef(kind, target), which: 'before' }) }; } catch (e) { say(`I couldn't set up the code from before this change: ${String(e.message).split('\n')[0]}.`); }
     try {
       const dirs = { now: join(runDir, 'recheck-now'), before: join(runDir, 'recheck-before') };
       mkdirSync(dirs.now, { recursive: true }); mkdirSync(dirs.before, { recursive: true });
@@ -84,7 +57,7 @@ export async function compareFailures(root, flows, { kind, target, runDir, env =
         finally { await app?.stop?.(); }
       };
       if (browser) for (const s of scripts) {
-        await once(root, dirs.now, s, nowRes, ownBuild);
+        await once(nowDir, dirs.now, s, nowRes, ownBuild);
         if (base && nowRes.get(s.name)?.ok === false) await once(base.dir, dirs.before, s, beforeRes);
       }
     } catch (e) { say(`I couldn't finish the comparison (${String(e.message).split('\n')[0]}).`); }
