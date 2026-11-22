@@ -24,7 +24,13 @@ NOTES="$NOTES" SIG=$(cat "$B/macos/Ultimate Tester.app.tar.gz.sig") VERSION="$VE
 
 # `gh release create` asks for the "workflow" scope here, so git pushes the tag and the API makes the release.
 git tag "$TAG" && git push -q origin "$TAG"
-# gh signs in from the macOS keychain: run this script in a normal terminal, not as a background job, or every call is a 404.
-gh api "repos/$REPO/releases" -f tag_name="$TAG" -f name="Ultimate Tester $VERSION" -f body="$NOTES" >/dev/null
+# GitHub sometimes answers 404 to creating the release for a tag pushed moments ago, and sometimes creates it
+# anyway (cause not found; the token has the right scopes). So: ask, check whether it exists, wait longer, ask again.
+for try in 1 2 3 4 5 6; do
+  gh api "repos/$REPO/releases" -f tag_name="$TAG" -f name="Ultimate Tester $VERSION" -f body="$NOTES" >/dev/null 2>&1 || true
+  gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 && break
+  [ "$try" = 6 ] && { echo "GitHub didn't create the release for $TAG. The tag is pushed; create it by hand, then upload $OUT/*." >&2; exit 1; }
+  sleep $((try * 10))
+done
 gh release upload "$TAG" -R "$REPO" "$OUT/UltimateTester.dmg" "$OUT/UltimateTester.app.tar.gz" "$OUT/latest.json"
 echo "Released $TAG: installed copies see it at their next launch."
