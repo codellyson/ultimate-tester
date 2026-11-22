@@ -259,10 +259,10 @@ async function addApp() {
   try { const a = await api<App>('/api/apps', { path }); await loadApps(); selectApp(a.id) } catch (e) { state.flash = (e as Error).message }
 }
 
-// Off the list only; the repo, its plan and its saved tests stay on disk.
+// Forgets the app: everything Ultimate Tester stored for it is deleted; your code is untouched.
 async function removeApp(id: string) {
   const a = state.apps.find((x) => x.id === id)
-  if (!a || !(await askConfirm({ title: `Remove ${a.name} from Ultimate Tester?`, message: 'Its repo, test plan and saved tests stay where they are; you can add it again any time.', okLabel: 'Remove', danger: true }))) return
+  if (!a || !(await askConfirm({ title: `Remove ${a.name} from Ultimate Tester?`, message: 'This deletes its test history, saved checks, known problems and saved sign-ins, and the test plan unless it is committed. Your code is not touched. This can’t be undone.', okLabel: 'Remove and delete', danger: true }))) return
   try {
     await api(`/api/apps/${id}`, undefined, 'DELETE')
     if (state.appId === id) { state.appId = null; state.home = true }

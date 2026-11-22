@@ -1,11 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 // Ultimate Tester's own copies go in a throwaway home, not the real ~/.ultimate-tester.
 process.env.ULTIMATE_TESTER_HOME = mkdtempSync(join(tmpdir(), 'ut-home-'));
+// Replays need Playwright, installed once per Mac in the real home: borrow it rather than download it again.
+const realReplay = join(homedir(), '.ultimate-tester', 'replay');
+if (existsSync(realReplay)) symlinkSync(realReplay, join(process.env.ULTIMATE_TESTER_HOME, 'replay'));
 const { baselineRef, judge, compareFailures } = await import('../baseline.js');
 const { CHROME, startBrowser } = await import('../live.js');
 

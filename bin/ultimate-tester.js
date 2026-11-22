@@ -13,6 +13,7 @@ import { listReplays, saveReplays, runReplays, startOwnApp } from '../replay.js'
 import { compareFailures } from '../baseline.js';
 import { clearLeftovers, stopOwnStarted, recordStarted, forgetStarted } from '../started.js';
 import { prepare } from '../workspace.js';
+import { removeHooks } from '../forget.js';
 import { signedOut, setupProblem } from '../preflight.js';
 import { readKnown, updateKnown, knownLines, unreportedFlows, sameCheck } from '../known.js';
 import { sessionFile } from '../actions.js';
@@ -469,21 +470,7 @@ function install(which) {
 
 // Takes Ultimate Tester's hooks out again ("stop", "commit", or both), leaving everyone else's alone.
 function uninstall(which) {
-  process.chdir(root());
-  if (which !== 'commit') {
-    for (const f of CLAUDE_FILES) {
-      if (!existsSync(f)) continue;
-      const before = readJson(f);
-      const after = withoutOurStopHook(before);
-      if (JSON.stringify(after) !== JSON.stringify(before)) { writeFileSync(f, JSON.stringify(after, null, 2) + '\n'); console.log(`Removed Stop hook from ${f}`); }
-    }
-  }
-  if (which === 'stop') return;
-  const hookFile = join(git('rev-parse', '--git-path', 'hooks'), 'post-commit');
-  if (existsSync(hookFile) && readFileSync(hookFile, 'utf8').includes('# ultimate-tester')) {
-    writeFileSync(hookFile, readFileSync(hookFile, 'utf8').split('\n').filter((l) => !l.includes('# ultimate-tester')).join('\n'));
-    console.log(`Removed background run from ${hookFile}`);
-  }
+  for (const d of removeHooks(root(), which)) console.log(`Removed ${d}`);
 }
 
 const [cmdName, ...rest] = process.argv.slice(2);
