@@ -8,6 +8,7 @@ Runs were going red for things the change didn't cause. Across 26 past runs, non
 
 ## A run, in order
 
+0. **Isolation** (`workspace.js`, `started.js`). Nothing runs in the developer's folder. Each app has Ultimate Tester's own git worktrees in `~/.ultimate-tester/work` (`now` and `before`), reset to exactly the code a run needs, with packages from that code's lockfile. Everything a run starts is recorded; Stop shuts it down at any stage, and leftovers from a crashed run are stopped by the next run or engine start.
 1. **Setup check** (`preflight.js`). The engine starts the app itself and tries each saved sign-in on a page only that persona reaches (taken from the plan's must-never-break `startAt`). An app that won't start, or every sign-in gone, ends the run as "Setup broken" with the app's last error line. No Tess session.
 2. **Replays** (`replay.js`). Saved scripts for must-never-break checks run first, one at a time, with no AI. A failed replay gets the app restarted before the next one, because some pages take the dev server down with them. Checks on the known-problems list aren't replayed.
 3. **Tess** (`prompt.md`). She plans the checks of the change, plus only the must-never-break checks the change can reach; the rest go in `skipped` with why. She uses the engine's copy of the app and may restart it on the same port. When a check of the change is blocked by something the change didn't cause, she tries one other way in (another persona, store or record) and records it as `tried`.
@@ -23,7 +24,8 @@ Planted tests passed while real apps broke these, so check each step on a real a
 
 - Turbopack refuses a `node_modules` linked from outside the folder: the old code needs its own install.
 - Next.js stops `next dev` to show an upgrade notice when it sees an AI agent (`AI_AGENT`, `CLAUDECODE`); the engine starts apps without those.
-- Next.js runs one dev server per folder: stop the engine's copy before starting another.
+- Next.js runs one dev server per folder: stop the engine's copy before starting another. (Isolation means it never meets the developer's own server.)
+- A run that crashes leaves its app, Tess and Chrome running; they're recognised by the folder they run in, since a port may only be in the environment.
 - Two Chrome instances can't share a profile folder.
 - A freshly started dev server compiles each page on first visit; timeouts there say nothing about the change.
 - A replay that only checks an error is absent passes on a page still loading; scripts must check for what a working page shows.
