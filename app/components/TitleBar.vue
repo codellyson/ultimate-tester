@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PhHouse, PhPlus, PhClockCounterClockwise, PhMoon, PhSun } from '@phosphor-icons/vue'
 // One bar: Home / app / test (the test is a menu), connection trouble, New test and ⌘K.
-const { state, openRun, startTest, addApp, show, tauri, setupAction, stopTest } = useTester()
+const { state, openRun, startTest, addApp, show, tauri, setupAction, stopTest, loadWork } = useTester()
 const app = computed(() => state.apps.find((a) => a.id === state.appId))
 // One click between dark and light; Settings also offers "Same as Mac".
 const look = useAppearance()
@@ -40,13 +40,15 @@ function toggle(which: 'app' | 'new' | 'runs') {
 const appBtn = ref<HTMLElement>()
 const triggers: Record<string, Ref<HTMLElement | undefined>> = { app: appBtn, runs: runBtn, new: newBtn }
 watch(() => state.menu, (m, prev) => nextTick(() => {
-  if (m) document.querySelector<HTMLElement>(`[data-menu="${m}"] [role=menuitem], [data-menu="${m}"] textarea`)?.focus()
+  if (m === 'new' && newBtn.value) left.value = newBtn.value.getBoundingClientRect().right
+  if (m === 'new') loadWork() // where the work is can change between tests
+  if (m) document.querySelector<HTMLElement>(`[data-menu="${m}"] [role^=menuitem], [data-menu="${m}"] textarea`)?.focus()
   else if (prev && (!document.activeElement || document.activeElement === document.body)) triggers[prev]?.value?.focus()
 }))
 function menuKey(e: KeyboardEvent) {
   if (e.key === 'Escape') { const m = state.menu; state.menu = null; if (m) nextTick(() => triggers[m]?.value?.focus()); return }
   if ((e.target as HTMLElement).tagName === 'TEXTAREA') return // arrows move the caret in the note
-  const items = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[role=menuitem]:not(:disabled)')]
+  const items = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[role^=menuitem]:not(:disabled)')]
   if (!items.length || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
   e.preventDefault()
   const i = items.indexOf(document.activeElement as HTMLElement)
@@ -119,11 +121,8 @@ const where = computed(() => (state.view === 'setup' ? 'Setup' : state.view === 
       </button>
     </div></Transition>
 
-    <Transition name="pop"><div v-if="state.menu === 'new'" data-menu="new" role="dialog" aria-label="New test" class="origin-top-right absolute top-10 z-30 w-80 rounded-[14px] bg-[var(--surface)] surface-float p-1.5" :style="{ left: `${Math.max(8, left - 320)}px` }" @click.stop @keydown="menuKey">
-      <p class="px-3 pt-2 pb-1 text-[12px] font-medium text-[var(--muted)]">What should Tess test?</p>
-      <button v-for="t in [...targetsFor(state.setup?.remotes), { kind: 'custom', label: 'Something else…', hint: 'a commit or range' }]" :key="t.label" role="menuitem" class="menu-item" :disabled="disabledNew" @click="startTest(t)">
-        <span class="flex-1 whitespace-nowrap">{{ t.label }}</span><span class="text-[12px] text-[var(--muted)] text-end">{{ t.hint }}</span>
-      </button>
+    <Transition name="pop"><div v-if="state.menu === 'new'" data-menu="new" role="dialog" aria-label="New test" class="origin-top-right absolute top-10 z-30 w-96 max-h-[80vh] overflow-y-auto rounded-[14px] bg-[var(--surface)] surface-float p-1.5" :style="{ left: `${Math.max(8, left - 384)}px` }" @click.stop @keydown="menuKey">
+      <WorkPicker :disabled="disabledNew" />
       <div class="my-1 border-t border-[var(--line)]" />
       <label class="block px-3 pt-1 pb-2">
         <span class="text-[12px] font-medium text-[var(--muted)]">Note for this test <span class="font-normal">(optional · ⌘↩ to test your changes)</span></span>

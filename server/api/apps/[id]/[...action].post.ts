@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
       case 'signin/start': a.signInStart(body.persona).catch(() => {}); break // keeps going; the page polls setup
       case 'signin/finish': await a.signInFinish(); break
       case 'cancel': a.cancelJob(); break
-      case 'run': a.startRun(body.kind, body.target, body.note, body.replayFrom); break
+      case 'run': a.startRun(body.kind, body.target, body.note, body.replayFrom, body.from); break
       case 'stop': a.stopRun(); break
       case 'lesson': a.addLesson(body.text, body.check); break
       case 'notes': a.setNotes(body.text); break

@@ -38,7 +38,8 @@ export const TARGETS = [
   { kind: 'range', target: 'origin/prd..HEAD', label: 'Release to prd', hint: 'everything going to prd' },
   { kind: 'range', target: 'origin/main..HEAD', label: 'Release to main', hint: 'everything going to main' },
 ] as const
-export type Target = { kind: string, target?: string, label?: string, hint?: string, replayFrom?: string }
+// from: the checkout to test; null for the main folder, left out for the one picked in "Where's the work?".
+export type Target = { kind: string, target?: string, label?: string, hint?: string, replayFrom?: string, from?: string | null }
 
 // Release choices only for branches the repo actually has (no origin/prd, no "Release to prd").
 export const targetsFor = (remotes: string[] = []) =>
@@ -55,6 +56,17 @@ export function chipText(step: string) {
     select_option: `chose ${rest}`, press_key: `pressed ${rest}`, resize: 'resized the window', wait_for: 'waited for the page',
   }
   return map[verb!] ?? null
+}
+
+// "3 hours ago", "yesterday", "5 days ago": how long since a checkout last changed.
+export function ago(ms: number) {
+  const m = Math.max(0, Math.round((Date.now() - ms) / 60000))
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m} min ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`
+  const d = Math.round(h / 24)
+  return d === 1 ? 'yesterday' : `${d} days ago`
 }
 
 export const shortLabel = (label: string) => label.replace(/\s*\(.*\)\s*$/, '')

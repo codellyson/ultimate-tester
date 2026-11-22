@@ -157,12 +157,14 @@ const metaLine = computed(() => {
   const c = r.value.change
   const hash = c?.message.match(/^([0-9a-f]{7,40}) /)?.[1]?.slice(0, 7)
   const files = c?.files?.length ? `${c.files.length} file${plural(c.files.length)}` : ''
+  // Work from an agent's worktree says where it was, since the worktree may be gone later.
+  const where = c?.from ? `${c.branch && c.branch !== 'HEAD' ? `${c.branch} in ` : ''}${c.from.split('/').pop()}` : ''
   const mins = v.value ? `${Math.round((v.value.durationMs ?? 0) / 60000) || '<1'} min` : ''
   // How much Tess was needed: checks replayed from saved steps (free) and checks she did this time.
   const flows = v.value?.flows ?? []
   const rep = flows.filter((f) => f.replayed).length
   const split = rep ? `${rep} replayed${flows.length - rep ? `, ${flows.length - rep} by Tess` : ', no Claude call'}` : ''
-  return [hash, files, mins, split, when(r.value.id)].filter(Boolean).join(' · ')
+  return [hash, where, files, mins, split, when(r.value.id)].filter(Boolean).join(' · ')
 })
 
 const now = ref(Date.now())

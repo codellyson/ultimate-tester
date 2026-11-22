@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { PhPlus, PhTrash, PhGearSix } from '@phosphor-icons/vue'
 // One app: where it stands, how to start a test, and every test so far. Settings live in the Settings window.
-const { state, startTest, openRun, show, openSettings, api, refresh, removeApp } = useTester()
+const { state, startTest, openRun, show, openSettings, api, refresh, removeApp, fromFolder } = useTester()
+// Tests start from the checkout where the work is (newest by default); Change opens the full picker.
+const from = computed(() => (state.work && state.work.folders.length > 1 ? fromFolder() : null))
+const fromName = (f: NonNullable<ReturnType<typeof fromFolder>>) => (f.main ? 'main folder' : f.path.split('/').at(-1))
 const app = computed(() => state.apps.find((a) => a.id === state.appId)!)
 const s = computed(() => state.setup!)
 const running = computed(() => !!s.value.running)
@@ -43,6 +46,10 @@ async function remove(id: string, title: string) {
 
       <div class="flex flex-col gap-3">
         <h2 class="font-[family-name:var(--font-serif)] text-[20px] font-semibold">New test</h2>
+        <p v-if="from" class="text-[13px] text-[var(--muted)] flex flex-wrap items-center gap-x-1.5">
+          From <b class="font-medium text-[var(--ink)]">{{ from.branch ?? 'no branch' }}</b> · {{ fromName(from) }} · {{ ago(from.activeAt) }}
+          <button class="link-quiet" @click.stop="state.menu = 'new'">Change</button>
+        </p>
         <div class="flex flex-wrap gap-2">
           <button v-for="(t, i) in targets" :key="t.label" :class="i === 0 ? 'btn-blue' : 'btn'" :disabled="running || !s.profileReady" :title="t.hint" @click="startTest(t)">{{ t.label }}</button>
           <button class="btn" :disabled="running || !s.profileReady" @click="startTest({ kind: 'custom' })"><PhPlus class="size-4" aria-hidden="true" />Something else</button>

@@ -55,8 +55,16 @@ function describe(ev) {
 }
 
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
-// The app's repo. Tess works in Ultimate Tester's own copy of it, so commands she runs are told the real one.
-const root = () => process.env.ULTIMATE_TESTER_ROOT || git('rev-parse', '--show-toplevel');
+// The app's repo: its main folder, also from inside a worktree of it (they share one git store), so an agent's
+// worktree is the same app with the same plan, sign-ins and history. Tess works in Ultimate Tester's own copy, so
+// commands she runs are told the real one.
+function mainRoot() {
+  const common = git('rev-parse', '--path-format=absolute', '--git-common-dir');
+  return basename(common) === '.git' ? dirname(common) : git('rev-parse', '--show-toplevel');
+}
+const root = () => process.env.ULTIMATE_TESTER_ROOT || mainRoot();
+// The folder this command was run from: a worktree when an agent's hook or commit started it. Its work is what's tested.
+const STARTED_IN = (() => { try { return git('rev-parse', '--show-toplevel'); } catch { return null; } })();
 
 // commit: a sha to test, or null for uncommitted changes. range: "base..head", everything about to ship.
 function collectChange(commit, range) {
@@ -233,7 +241,9 @@ async function setupEnv(source) {
 }
 
 // Returns { status, report } — status is pass | fail | unverified | skip.
-async function run({ commit = null, range = null, dedupe = false, note = '', replayFrom = null } = {}) {
+// from: the folder whose work is tested (a worktree, say); by default the one this command was run from.
+async function run({ commit = null, range = null, dedupe = false, note = '', replayFrom = null, from = null } = {}) {
+  const src = from || STARTED_IN || root();
   process.chdir(root());
   clearLeftovers();
   // Stop (SIGTERM) can come at any stage, not only while Tess works: the apps this run started go down with it.
@@ -241,7 +251,10 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   const testPlan = readPlan(root());
   if (!testPlan.format) return { status: 'skip', report: `No ${PROFILE}. Run: ultimate-tester init` };
   if (testPlan.errors.length) return { status: 'skip', report: `Ultimate Tester: the test plan has problems, so nothing was tested.\n${testPlan.errors.map((e) => `- ${e}`).join('\n')}` };
+  process.chdir(src);
   const change = collectChange(commit, range);
+  const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
+  process.chdir(root());
   // A release is many changes at once; give it room unless someone set a limit.
   if (range && !process.env.ULTIMATE_TESTER_TIMEOUT_MS) TIMEOUT_MS = Math.max(25, SETTINGS.timeoutMin) * 60_000;
   const skip = shouldSkip(change.files);
@@ -260,11 +273,11 @@ async function run({ commit = null, range = null, dedupe = false, note = '', rep
   mkdirSync(runDir, { recursive: true });
   // Stop (from the window, whoever started this run) signals this process; see runTester.
   writeFileSync(join(runDir, 'pid'), String(process.pid));
-  writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: change.mode, message: change.message, files: change.files, note, kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit ?? null }));
+  writeFileSync(join(runDir, 'change.json'), JSON.stringify({ mode: change.mode, message: change.message, files: change.files, note, kind: range ? 'range' : commit ? 'commit' : 'changes', target: range ?? commit ?? null, branch, from: src !== root() ? src : undefined }));
   // Isolation: everything runs in Ultimate Tester's own copy of the app, set to exactly the code under test.
   appendFileSync(join(runDir, 'live.log'), `say: Setting up my own copy of ${basename(root())} with the code to test.\n`);
   let work;
-  try { work = await prepare(root(), { ref: range ? (String(range).split('..')[1] || 'HEAD') : commit ?? 'HEAD', changes: !range && !commit }); } catch (e) {
+  try { work = await prepare(root(), { ref: range ? (String(range).split('..')[1] || 'HEAD') : commit ?? 'HEAD', changes: !range && !commit, from: src }); } catch (e) {
     const verdict = { status: 'unverified', setup: 'broken', summary: `I didn't test anything, because the test setup is broken: I couldn't set up my own copy of the app (${String(e.message).split('\n')[0].slice(0, 300)}). Nothing is known about the change yet.`, flows: [] };
     writeFileSync(join(runDir, 'verdict.json'), JSON.stringify(verdict, null, 2));
     return { status: 'unverified', report: `Ultimate Tester: SETUP BROKEN — ${verdict.summary}` };
@@ -459,7 +472,8 @@ function install(which) {
   // The commit hook only when asked for by name: plain `install` adds the Claude Code hook alone.
   if (which !== 'commit') return;
   const hookFile = join(git('rev-parse', '--git-path', 'hooks'), 'post-commit');
-  const line = `${cmd} run --commit > ${STATE}/last-commit.log 2>&1 & # ultimate-tester\n`;
+  // The log goes to the main folder: a commit in a worktree runs this hook there, where .ultimate-tester/ doesn't exist.
+  const line = `${cmd} run --commit > ${JSON.stringify(join(root(), STATE, 'last-commit.log'))} 2>&1 & # ultimate-tester\n`;
   const existing = existsSync(hookFile) ? readFileSync(hookFile, 'utf8') : '#!/bin/sh\n';
   if (!existing.includes('# ultimate-tester')) {
     writeFileSync(hookFile, existing + line);
@@ -483,7 +497,8 @@ switch (cmdName) {
     const n = rest.indexOf('--note');
     const su = rest.indexOf('--setup');
     const rf = rest.indexOf('--replay-from');
-    const { status, report } = su >= 0 ? await setupEnv(rest[su + 1] ?? '') : await run({ commit, range: r < 0 ? null : rest[r + 1], note: n < 0 ? '' : rest[n + 1] ?? '', replayFrom: rf < 0 ? null : rest[rf + 1] ?? null });
+    const fr = rest.indexOf('--from');
+    const { status, report } = su >= 0 ? await setupEnv(rest[su + 1] ?? '') : await run({ commit, range: r < 0 ? null : rest[r + 1], note: n < 0 ? '' : rest[n + 1] ?? '', replayFrom: rf < 0 ? null : rest[rf + 1] ?? null, from: fr < 0 ? null : rest[fr + 1] ?? null });
     console.log(report);
     process.exit(exitFor[status]);
   }

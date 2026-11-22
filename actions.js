@@ -9,6 +9,7 @@ import { signInWindow, freePort } from './live.js';
 import { findAppByRepo } from './apps.js';
 import { checkoutOf } from './linked.js';
 import { readPlan, addLesson as planLesson, setNotes as planNotes, PLAN_FILES, planSchema, validate, savePlanJson, answerPlan, getAt, schemaAt, planToMarkdown, PLAN_MD, setPlanFields, replacePlan } from './plan.js';
+import { listWork, isCheckout } from './workspace.js';
 
 // UT_HOME is set by `ultimate-tester serve`; once Nitro bundles this file, import.meta.url no longer points at the repo.
 const HOME = process.env.UT_HOME ?? dirname(fileURLToPath(import.meta.url));
@@ -125,8 +126,8 @@ export function createActions(root) {
     child.stdin.end(prompt);
   });
   // Uncommitted files except Tess's own plan; null in a repo with no commit yet (no HEAD to compare with).
-  const changedFiles = () => {
-    const git = (...a) => execFileSync('git', a, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean);
+  const changedFiles = (dir = root) => {
+    const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean);
     try { return [...git('diff', 'HEAD', '--name-only'), ...git('ls-files', '--others', '--exclude-standard')].filter((f) => !PLAN_FILES.includes(f)); } catch { return null; }
   };
 
@@ -426,7 +427,12 @@ In "unsure", list each answer you could not work out from the repo (the schema m
     },
 
     // kind: "changes" | "commit" | "range"; target: sha or base..head; note: extra instructions for this run only.
-    startRun(kind, target, note, replayFrom) {
+    // Where the work is: every checkout of this repo (main folder and worktrees), newest activity first.
+    work: () => listWork(root),
+
+    // from: the checkout to test (a worktree an agent or a person works in); the main folder when not given.
+    startRun(kind, target, note, replayFrom, from) {
+      if (from && from !== root && !isCheckout(root, from)) throw new Error("That folder isn't a checkout of this repo");
       if (typeof note === 'string' && note.length > 1000) throw new Error('Keep the note under 1000 characters');
       if (run || activeRun()) throw new Error('A test is already running');
       if (kind === 'setup' && !/^[\w-]+$/.test(target ?? '')) throw new Error('Pick a finished test to set up for');
@@ -435,7 +441,7 @@ In "unsure", list each answer you could not work out from the repo (the schema m
       if (kind === 'commit' && target && !/^[\w./-]+$/.test(target)) throw new Error('That is not a commit or branch name');
       // Say so up front instead of starting a test that stops at once with nothing to show.
       if (kind === 'changes') {
-        const files = changedFiles();
+        const files = changedFiles(from || root);
         const skip = files && shouldSkip(files);
         if (skip === 'no changes') throw new Error("You haven't changed anything since the last commit. Make a change, or test the last commit.");
         if (skip) throw new Error('You only changed docs, so there is nothing for me to click through. Test the last commit instead.');
@@ -444,6 +450,7 @@ In "unsure", list each answer you could not work out from the repo (the schema m
       if (note?.trim()) args.push('--note', note.trim());
       // Test again: replay that test's checks first, so only what's left goes to Tess.
       if (typeof replayFrom === 'string' && /^[\w-]+$/.test(replayFrom)) args.push('--replay-from', replayFrom);
+      if (from && from !== root) args.push('--from', from);
       run = spawn(process.execPath, [CLI, 'run', ...args], { cwd: root, stdio: 'ignore', detached: true, env: childEnv() });
       run.on('close', () => { run = null; });
       run.unref();

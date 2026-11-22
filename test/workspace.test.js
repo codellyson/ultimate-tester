@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.ULTIMATE_TESTER_HOME = mkdtempSync(join(tmpdir(), 'ut-home-'));
-const { prepare, removeWork, workDir } = await import('../workspace.js');
+const { prepare, removeWork, workDir, listWork, isCheckout } = await import('../workspace.js');
 
 test("tests run in Ultimate Tester's own copy, set to the code under test; your folder is never touched", async () => {
   const root = mkdtempSync(join(tmpdir(), 'ut-repo-'));
@@ -48,4 +48,47 @@ test("tests run in Ultimate Tester's own copy, set to the code under test; your 
   removeWork(root);
   assert.ok(!existsSync(mine) && !existsSync(old));
   assert.equal(git('worktree', 'list').split('\n').length, 1);
+});
+
+test("an agent's worktree is tested, not the stale main folder", async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ut-repo-'));
+  const git = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8' }).trim();
+  git(root, 'init', '-q'); git(root, 'config', 'user.email', 't@example.test'); git(root, 'config', 'user.name', 'T');
+  writeFileSync(join(root, 'app.js'), 'old\n'); git(root, 'add', 'app.js'); git(root, 'commit', '-qm', 'old');
+  writeFileSync(join(root, '.ultimate-tester.json'), '{"plan":"main"}\n');
+  writeFileSync(join(root, '.env'), 'FROM=main\n');
+  // The agent's worktree: a newer commit on its branch, an uncommitted edit, a new file, and no .env of its own.
+  const wt = join(mkdtempSync(join(tmpdir(), 'ut-wt-')), 'agent');
+  git(root, 'worktree', 'add', '-q', '-b', 'agent/fix', wt);
+  writeFileSync(join(wt, 'app.js'), 'agent commit\n'); git(wt, 'commit', '-qam', 'agent work');
+  writeFileSync(join(wt, 'app.js'), 'agent commit, then edited\n'); writeFileSync(join(wt, 'added.js'), 'added\n');
+
+  const last = await prepare(root, { ref: 'HEAD', from: wt });
+  assert.equal(readFileSync(join(last, 'app.js'), 'utf8'), 'agent commit\n', "the worktree's last commit, not main's");
+  const mine = await prepare(root, { changes: true, from: wt });
+  assert.equal(readFileSync(join(mine, 'app.js'), 'utf8'), 'agent commit, then edited\n', "and the worktree's uncommitted work");
+  assert.equal(readFileSync(join(mine, 'added.js'), 'utf8'), 'added\n');
+  assert.equal(readFileSync(join(mine, '.ultimate-tester.json'), 'utf8'), '{"plan":"main"}\n', "the app's plan from the main folder");
+  assert.equal(readFileSync(join(mine, '.env'), 'utf8'), 'FROM=main\n', ".env from the main folder when the worktree has none");
+  assert.equal(readFileSync(join(root, 'app.js'), 'utf8'), 'old\n', 'neither folder is touched');
+  assert.equal(readFileSync(join(wt, 'app.js'), 'utf8'), 'agent commit, then edited\n');
+  removeWork(root);
+});
+
+test("where the work is: every checkout, newest first, without Ultimate Tester's own copies", async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ut-repo-'));
+  const git = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8' }).trim();
+  git(root, 'init', '-q', '-b', 'main'); git(root, 'config', 'user.email', 't@example.test'); git(root, 'config', 'user.name', 'T');
+  writeFileSync(join(root, 'a.js'), 'a\n'); git(root, 'add', 'a.js'); git(root, 'commit', '-qm', 'one', '--date', '2026-01-01T00:00:00');
+  execFileSync('git', ['commit', '--amend', '-qm', 'one'], { cwd: root, env: { ...process.env, GIT_COMMITTER_DATE: '2026-01-01T00:00:00' } });
+  writeFileSync(join(root, '.ultimate-tester.json'), '{}'); // the plan isn't "work"
+  const wt = join(mkdtempSync(join(tmpdir(), 'ut-wt-')), 'agent');
+  git(root, 'worktree', 'add', '-q', '-b', 'agent/x', wt);
+  writeFileSync(join(wt, 'b.js'), 'b\n'); writeFileSync(join(wt, 'c.js'), 'c\n');
+  await prepare(root); // Ultimate Tester's copy is a worktree too, and must not be listed
+  const { folders } = await listWork(root);
+  assert.deepEqual(folders.map((f) => [f.branch, f.main, f.uncommitted]), [['agent/x', false, 2], ['main', true, 0]]);
+  assert.ok(folders.every((f) => isCheckout(root, f.path)), 'a listed folder can be tested from');
+  assert.ok(!isCheckout(root, '/tmp/somewhere-else'));
+  removeWork(root);
 });

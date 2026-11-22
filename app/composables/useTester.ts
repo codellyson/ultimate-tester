@@ -10,7 +10,7 @@ export type Answer = { status: string, short: string, text: string }
 export type Verdict = { status: string, summary: string, flows: Flow[], setup?: 'broken', answer?: { change: Answer, broke: Answer }, durationMs?: number, usage?: string }
 export type RunDetail = RunInfo & {
   apps?: { name: string, role: 'app' | 'backend', source?: 'local' | 'dev' | 'missing', branch?: string | null, commit?: string | null, dirty?: boolean, why?: string | null }[] | null
-  plan: PlanItem[] | null, planUnreadable: boolean, intro: string, change: { message: string, files: string[], mode: string, note?: string, kind?: string, target?: string | null, source?: { id: string, kind: string, target: string | null, note: string, checks: string[] } } | null,
+  plan: PlanItem[] | null, planUnreadable: boolean, intro: string, change: { message: string, files: string[], mode: string, note?: string, kind?: string, target?: string | null, branch?: string, from?: string, source?: { id: string, kind: string, target: string | null, note: string, checks: string[] } } | null,
   live: { url: string } | null, typicalMs: number | null, steps: string[], verdict: Verdict | null, shots: string[]
 }
 export type General = { model: 'opus' | 'sonnet', timeoutMin: number, notifications: boolean }
@@ -24,7 +24,13 @@ export type Setup = {
 
 export const OTHER = '__other__'
 
+// Where the work is: one checkout of the app's repo (its main folder or a worktree an agent or a person works in).
+export type Checkout = { path: string, branch: string | null, main: boolean, uncommitted: number, lastCommitAt: number, activeAt: number }
+
 const state = reactive({
+  // Every checkout, newest activity first, and the one tests start from (the newest, unless the person picked one).
+  work: null as { base: string | null, folders: Checkout[] } | null,
+  from: null as string | null,
   apps: [] as App[],
   appId: null as string | null,
   view: null as 'app' | 'setup' | 'run' | 'onboard' | null,
@@ -117,6 +123,7 @@ async function announce(apps: App[]) {
 async function refresh() {
   const id = state.appId
   if (!id) return
+  if (!state.work) loadWork()
   try {
     const [setup, runs] = await Promise.all([api<Setup>(`/api/apps/${id}/setup`), api<RunInfo[]>(`/api/apps/${id}/runs`)])
     if (id !== state.appId) return
@@ -152,10 +159,24 @@ async function leaveDraft() {
 async function selectApp(id: string) {
   if (!(await leaveDraft())) return
   if (!state.inSettings) try { localStorage.setItem(LAST_APP, id) } catch {}
-  Object.assign(state, { home: false, appId: id, runId: null, follow: true, setup: null, detail: null, plan: [], view: null })
+  Object.assign(state, { home: false, appId: id, runId: null, follow: true, setup: null, detail: null, plan: [], view: null, work: null, from: null })
   history.replaceState(null, '', `?app=${id}`)
   refresh()
+  loadWork()
 }
+
+async function loadWork() {
+  const id = state.appId
+  if (!id) return
+  try {
+    const w = await api<{ base: string | null, folders: Checkout[] }>(`/api/apps/${id}/work`)
+    if (state.appId !== id) return
+    state.work = w
+    if (!w.folders.some((f) => f.path === state.from)) state.from = w.folders[0]?.path ?? null
+  } catch {}
+}
+// The checkout tests start from; null until the list has loaded.
+const fromFolder = () => state.work?.folders.find((f) => f.path === state.from) ?? null
 
 async function show(v: 'app' | 'setup' | 'run' | 'onboard') {
   if (v !== state.view && !(await leaveDraft())) return
@@ -177,7 +198,8 @@ async function startTest(t: Target) {
   const { kind, target } = t
   if (kind === 'custom') { state.sheet = true; return }
   try {
-    await api(`/api/apps/${state.appId}/run`, { kind, target, note: state.note, replayFrom: t.replayFrom })
+    const f = t.from !== undefined ? t.from : fromFolder()?.main ? null : state.from
+    await api(`/api/apps/${state.appId}/run`, { kind, target, note: state.note, replayFrom: t.replayFrom, from: f ?? undefined })
     state.note = ''
     state.follow = true
     // Jump to the new test only if the person is still where they started it from.
@@ -187,10 +209,10 @@ async function startTest(t: Target) {
 }
 
 // Run the open test again, exactly as it was asked for (same commit, range or uncommitted changes, same note).
-async function rerun(r: { kind?: string | null, target?: string | null, note?: string } | null = state.view === 'run' ? state.detail?.change ?? null : null) {
+async function rerun(r: { kind?: string | null, target?: string | null, note?: string, from?: string } | null = state.view === 'run' ? state.detail?.change ?? null : null) {
   if (!r) { state.flash = 'Open a test first, then run it again.'; return }
   state.note = r.note ?? ''
-  await startTest({ kind: r.kind ?? 'changes', target: r.target ?? undefined, replayFrom: state.view === 'run' ? state.detail?.id : undefined })
+  await startTest({ kind: r.kind ?? 'changes', target: r.target ?? undefined, replayFrom: state.view === 'run' ? state.detail?.id : undefined, from: r.from ?? null })
 }
 
 async function stopTest() {
@@ -367,5 +389,5 @@ async function boot() {
 }
 
 export function useTester() {
-  return { state, tauri, saveGeneral, leaveDraft, api, refresh, loadApps, selectApp, show, openRun, startTest, rerun, stopTest, openSettings, addApp, addSample, removeApp, setupAction, boot }
+  return { loadWork, fromFolder, state, tauri, saveGeneral, leaveDraft, api, refresh, loadApps, selectApp, show, openRun, startTest, rerun, stopTest, openSettings, addApp, addSample, removeApp, setupAction, boot }
 }
